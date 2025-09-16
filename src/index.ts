@@ -10,6 +10,7 @@ import { demographicValidationHook } from "./listeners/demographic-validation.li
 import { demographicV2ValidationHook } from "./listeners/demographic-v2-validation.listener";
 import { demographicReferenceDataListener } from "./listeners/demographic-reference-data.listener";
 import { demographicV2CitizenshipHook } from "./listeners/demographic-v2-citizenship.listener";
+import { stateLicenseValidationHook } from "./actions/validate-state-license.action";
 
 export default function (listener: FlatfileListener) {
   // Globally installed plugins
@@ -21,6 +22,7 @@ export default function (listener: FlatfileListener) {
   listener.use(demographicValidationHook);
   listener.use(demographicV2ValidationHook);
   listener.use(demographicV2CitizenshipHook);
+  listener.use(stateLicenseValidationHook);
 
   // Custom listeners
   reverseNameListener(listener);

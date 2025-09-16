@@ -20,6 +20,7 @@
     "@flatfile/plugin-export-workbook": "^5.2.3",
     "@flatfile/plugin-job-handler": "^0.8.1",
     "@flatfile/plugin-record-hook": "^1.11.2",
+    "@flatfile/plugin-rollout": "^1.4.0",
     "@flatfile/plugin-space-configure": "^0.8.0",
     "@flatfile/plugin-xlsx-extractor": "^4.0.5",
     "flatfile": "^3.5.9",
