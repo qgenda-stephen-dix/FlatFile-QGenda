@@ -1,5 +1,5 @@
 import { Flatfile } from "@flatfile/api";
-import { reverseNameAction } from "../../actions/reverse-name.action";
+import { reverseNameAction } from "../actions/reverse-name.action";
 
 export const usersSheet: Flatfile.SheetConfig = {
   name: "Users",
