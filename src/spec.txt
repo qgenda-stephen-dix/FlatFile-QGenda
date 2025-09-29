@@ -1,0 +1,267 @@
+QGenda Credentialing Data Import Flatfile POC Spec
+
+Date: 2025-01-22 (Based on the other Spec Doc)
+
+I. Use Case
+
+QGenda provides healthcare workforce management solutions. One key area is credentialing, involving maintaining and verifying a comprehensive database of provider information (licenses, certifications, education, work history, etc.). This information is essential for ensuring compliance, enabling efficient scheduling, and improving overall patient care.
+
+Currently, QGenda faces challenges integrating data from various sources, including competitor systems, manually maintained spreadsheets, and legacy databases. The data often arrives in inconsistent formats (SQL, CSV, Excel), requiring significant manual effort for data conversion, normalization, and validation before integration into the QGenda system. They are looking for a solution that will automate the data conversion process, reduce the need for customers to adapt their formats, and eliminate manual intervention to reduce the burden on internal resources.
+
+II. Project Overview
+
+Build a proof of concept (POC) to demonstrate Flatfile's ability to streamline and automate QGenda's credentialing data import process. The POC should focus on the following goals:
+
+Automated Data Conversion: Enable import of data from diverse formats (SQL, CSV, Excel) without requiring customers to pre-format their data.
+
+Intelligent Data Mapping: Automatically identify and map source fields to QGenda's target data model (Providers and Locations).
+
+Automated Data Validation: Implement data validation rules (e.g., ISO date formatting, ensuring US states are properly formatted, ensuring data conforms to one of many validation rules - currently stored as SQL scripts) and provide clear error reporting.
+
+Eliminate Data Errors: Reduce manual intervention, minimizing human error during data conversion and validation.
+
+Simplified Workflow: Provide a user-friendly interface for both QGenda internal staff and external customers (data providers) to upload, map, and validate data.
+
+"Zero Trust" Al: Ensure that no sensitive customer data is used to train any models.
+
+Flexible Workflow Design: Make API calls to various services.
+
+Data Cataloging: Metadata analysis to identify data types, values, and relationships.
+
+Schema Flexibility: Handle varying database formats.
+
+The POC should also provide a foundation for future integration with QGenda's existing systems, including the credentialing product and other integration partners.
+
+Key Stakeholders and Team Members
+
+Name	Representing	Contact	Title / Role
+Eric Crane	Flatfile	eric@flatfile.io	COO, Co-founder
+Stephen Dix	QGenda		Engineer
+Chris Barnett	QGenda		Senior Director
+Brandon Lenz	QGenda		Director of Customer Success
+Brian Lee	QGenda		System Admin
+Recardo Tucker	QGenda		IT Manager
+
+III. Requirements
+
+Current Business Process
+
+QGenda receives data from various sources (competitor systems, spreadsheets, etc.) in different formats (SQL, CSV, Excel).
+
+QGenda engineers manually convert and normalize the data to fit the QGenda data model.
+
+Data validation is performed using SQL scripts and manual review.
+
+Errors are manually corrected, often requiring back-and-forth communication with the data provider.
+
+Validated data is loaded into the QGenda system.
+
+Pain Points
+
+Diverse Data Formats: Data arrives in various formats (SQL, CSV, Excel), requiring custom conversion processes for each source.
+
+Manual Data Conversion: Manual data conversion is time-consuming, error-prone, and requires specialized technical skills.
+
+Lack of Automation: The process is largely manual, limiting scalability and efficiency.
+
+Data Quality Issues: Inconsistent data formats, missing data, and data errors lead to data quality issues and require manual correction.
+
+Slow Onboarding: The manual process results in a slow onboarding process for new data sources and customers.
+
+Training Costs: Training engineers to work with the various legacy structures.
+
+Difficulty identifying data to discard: Lack of standardized validation.
+
+Data Integrity: Validation requires metadata and value analysis for data integrity.
+
+Business Process Requirements
+
+Req ID	Requirement	Go-Live Critical Y/N?	POC Tech Requirements
+1	Automate data conversion from diverse formats (SQL, CSV, Excel).	Y	* Support for reading and parsing common data formats (SQL, CSV, Excel, dbf, mdb) * Extraction of data from different spreadsheets * Support for custom data extraction plugins. * Ability to handle different sheet headers.
+2	Automatically map source fields to QGenda's target data model (Providers, Locations)	Y	* Intelligent field matching based on data analysis and semantic understanding. * Automatic data type identification. * Data type validation. * Ability to define and apply custom mapping rules. * Leverage pre-existing mappings
+3	Implement data validation rules and provide clear error reporting.	Y	* Ability to define and apply custom validation rules (e.g., data type checks, range checks, regular expressions). * Clear and user-friendly error reporting with suggested corrections. * Reuse their 300 SQL validation scripts
+4	Provide a user-friendly interface for uploading, mapping, and validating data.	Y	* Drag-and-drop interface for file upload. * Intuitive interface for defining mapping rules. * Real-time data preview and validation feedback.
+5	Enable self-service data onboarding for external customers (data providers).	N	* Guest access for external users to upload, map, and validate data. * Secure data transfer and storage. * Role-based access control.
+6	Analyze and Catalog Data in order to identify data for discard	Y	Metadata and value analysis in order to identify data.
+7	Do not train Al on customer data	Y	Hosted model for the Al.
+
+Credentialing Import Schemas
+
+Based on the "Copy of [Internal] Credentialing Import Specifications" file:
+
+Provider Demographic
+
+Provider Appointment Dates
+
+Provider Payer Enrollment
+
+Provider Professional Account
+
+Provider Location Details
+
+Provider Privileges
+
+Provider Supervisor
+
+State Licenses
+
+DEA Licenses
+
+Board Certifications
+
+CDS Certificates
+
+Malpractice Insurances
+
+Malpractice Claim
+
+Other Certifications
+
+Other Record
+
+Other Sanctions and Exclusions
+
+Education
+
+Education Gap
+
+Personal Reference
+
+Professional Reference
+
+Professional Training
+
+CME
+
+Work History
+
+Work Gap
+
+Affiliation
+
+Health Record
+
+Driver's License
+
+File Details
+
+Location
+
+User Defined Fields Configuration
+
+Payers
+
+Payer-Locations
+
+IV. Solution
+
+Capabilities In Scope
+
+Flatfile will provide an import workflow that covers the following capabilities:
+
+Data Ingestion: Support uploading and processing various data formats (SQL, CSV, Excel, dbf, mdb).
+
+Schema Discovery: Automatically identify and interpret the schema of the uploaded data.
+
+Intelligent Mapping: Automatically map source fields to QGenda's target data model (Providers and Locations).
+
+Data Transformation: Provide data transformation capabilities, including:
+
+String manipulation (e.g., splitting, concatenation, case conversion).
+
+Date formatting and normalization (ISO Standard).
+
+Data validation and cleansing.
+
+Handling missing values.
+
+Data Validation: Implement data validation rules, including:
+
+Data type checks.
+
+Range checks.
+
+Regular expressions.
+
+Custom SQL-based validation scripts.
+
+Error Reporting: Provide clear and user-friendly error reporting, with suggestions for corrections.
+
+User Interface: Develop a user-friendly interface for uploading, mapping, validating, and correcting data.
+
+"Zero Trust" Al: Ensure that no sensitive customer data is used to train any models.
+
+External API call: Make external API calls based on specific conditions.
+
+Analysis Engine: Analyze Metadata values.
+
+Eliminations
+
+Flatfile will build a placeholder for a notification event that is sent to the analyst who created the
+project space upon the upload of any file to the space.
+
+Workflow in Flatfile
+
+The analyst will create a “Space” in Flatfile for each new client list to be collected
+
+The analyst should name the space after the client (e.g. “Epic Systems")
+
+The analyst will then click on “Guests” and then invite the client point of contact via email
+
+The client will then be able to upload either a CSV or an Excel spreadsheet of their client list
+
+Alternatively, if the analyst already has the client list, they can upload that client list directly into the Space
+
+When files are uploaded, the user (whether analyst or vendor) will be presented with the option to import (i.e. map) that data into the target spreadsheet
+
+If that file has been automatically mapped, there will be a visual indicator on the file that automapping has taken place, and the user can proceed directly to the sheet for review
+
+Upon mapping, Flatfile will auto-normalize the data according to the field validation rules described above
+
+In the case Flatfile cannot auto-normalize the data, Flatfile will return an error and any applicable messaging
+
+When review is completed on the data, the analyst will click Submit and enter the target information
+
+When a successful callback is received, the data will be deleted from Flatfile
+
+Out of Scope
+
+The following items are reserved for a full Flatfile implementation:
+
+Direct connection to the QGenda systems or any QGenda API for loading data into the system.
+
+Leveraging the QGenda database to look up whether and how a specific client has already been onboarded (TBD if needed).
+
+Direct integration with QGenda's preferred notification system.
+
+Custom-themed invitation emails for data providers.
+
+Entity resolution on Company information.
+
+Al Model Training.
+
+Approach and Methodology
+
+Deliverables
+
+A fully-configured Flatfile POC codebase.
+
+An interactive demo of the POC in practice.
+
+Technology Stack
+
+Flatfile Listener code in Typescript/Javascript.
+
+Flatfile REST API.
+
+Flatfile-built Plugins as required by the use case.
+
+Webhook mocking website
+
+Assumptions and Constraints
+
+QGenda will provide technical representatives to receive a demo of the POC.
+
+QGenda will be able to complete the "last-mile" of integration into their systems.
+
+Representative examples of client databases will be shared to develop the POC.
