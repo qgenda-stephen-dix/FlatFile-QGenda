@@ -4,6 +4,7 @@ import { demographicV2Sheet } from "../blueprints/sheets/demographic-v2.sheet";
 import { demographicReferenceSheet } from "../blueprints/sheets/demographic-reference.sheet";
 import { stateLicenseSheet } from "../blueprints/sheets/state-license.sheet";
 import { deaLicenseSheet } from "../blueprints/sheets/dea-license.sheet";
+import { affiliationSheet } from "../blueprints/sheets/affiliation.sheet";
 
 // Generate field mappings from all sheet configurations
 export function generateFieldMappings(): { [key: string]: string } {
@@ -13,7 +14,8 @@ export function generateFieldMappings(): { [key: string]: string } {
     demographicV2Sheet,
     demographicReferenceSheet,
     stateLicenseSheet,
-    deaLicenseSheet
+    deaLicenseSheet,
+    affiliationSheet
   ];
 
   const mappings: { [key: string]: string } = {};

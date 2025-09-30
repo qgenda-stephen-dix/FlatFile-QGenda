@@ -13,6 +13,8 @@ import { demographicV2CitizenshipHook } from "./listeners/demographic-v2-citizen
 import { stateLicenseValidationHook } from "./blueprints/actions/validate-state-license.action";
 import { deaLicenseValidationHook } from "./listeners/dea-license-validation.listener";
 import { validateDEALicenseAction } from "./blueprints/actions/validate-dea-license.action";
+import { affiliationValidationHook } from "./listeners/affiliation-validation.listener";
+import { validateAffiliationAction } from "./blueprints/actions/validate-affiliation.action";
 import { customDownloadWorkbookAction } from "./blueprints/actions/custom-download-workbook.action";
 import { rolloutPlugin } from "./plugins/rollout.plugin";
 import { generateFieldMappings } from "./utils/field-mappings";
@@ -42,6 +44,8 @@ export default function (listener: FlatfileListener) {
   listener.use(stateLicenseValidationHook);
   listener.use(deaLicenseValidationHook);
   listener.use(validateDEALicenseAction);
+  listener.use(affiliationValidationHook);
+  listener.use(validateAffiliationAction);
 
   // Register the rollout plugin root handler for agent deployment events
   listener.use(rolloutPlugin.root);
