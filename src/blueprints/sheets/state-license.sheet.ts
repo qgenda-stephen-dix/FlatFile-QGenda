@@ -3,6 +3,7 @@ import { Flatfile } from "@flatfile/api";
 export const stateLicenseSheet: Flatfile.SheetConfig = {
   name: "State License",
   slug: "state_license",
+  access: ["add", "edit", "delete", "import"],
   fields: [
     // Key Identity Fields - 
     {
@@ -29,7 +30,8 @@ export const stateLicenseSheet: Flatfile.SheetConfig = {
           { value: "NPI", label: "NPI" },
           { value: "InternalID", label: "Internal ID" },
           { value: "ProviderID", label: "Provider ID" },
-          { value: "EmrID", label: "EMR ID" }
+          { value: "EmrID", label: "EMR ID" },
+          { value: "BillingSystemID", label: "Billing System ID" }
         ]
       }
     },
@@ -41,8 +43,8 @@ export const stateLicenseSheet: Flatfile.SheetConfig = {
       constraints: [{ type: "required" }],
       config: {
         options: [
-          { value: "Y", label: "Yes" },
-          { value: "N", label: "No" }
+          { value: "Y", label: "Y" },
+          { value: "N", label: "N" }
         ]
       }
     },
@@ -68,8 +70,8 @@ export const stateLicenseSheet: Flatfile.SheetConfig = {
       description: "Required field for manual license",
       config: {
         options: [
-          { value: "Y", label: "Yes" },
-          { value: "N", label: "No" }
+          { value: "Y", label: "Y" },
+          { value: "N", label: "N" }
         ]
       }
     },
@@ -102,9 +104,9 @@ export const stateLicenseSheet: Flatfile.SheetConfig = {
       description: "Must be Y, N, or blank",
       config: {
         options: [
-          { value: "Y", label: "Yes" },
-          { value: "N", label: "No" },
-          { value: "", label: "Not Specified" }
+          { value: "Y", label: "Y" },
+          { value: "N", label: "N" },
+          { value: "", label: "Blank" }
         ]
       }
     },
@@ -169,8 +171,8 @@ export const stateLicenseSheet: Flatfile.SheetConfig = {
       description: "Must be Y or N",
       config: {
         options: [
-          { value: "Y", label: "Yes" },
-          { value: "N", label: "No" }
+          { value: "Y", label: "Y" },
+          { value: "N", label: "N" }
         ]
       }
     },
@@ -210,6 +212,14 @@ export const stateLicenseSheet: Flatfile.SheetConfig = {
       type: "date",
       label: "TimeStamp",
       description: "Format m/d/yyyy"
+    }
+  ],
+  actions: [
+    {
+      operation: "validateStateLicense",
+      mode: "foreground",
+      label: "Validate State License Data",
+      description: "Validate state license records against business rules"
     }
   ]
 };

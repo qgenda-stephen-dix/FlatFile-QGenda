@@ -1,0 +1,4 @@
+Provider Name,External ID,External ID Type,Auto-Verify?,State,Specialty License,Currently Practicing?,License Number,License Type,NPDB Field of Licensure,Submit to NPDB,Endorsements,Status,Issue Date,Expiration Date,Monitor Expiration Date,Record Viewable by Provider,Ignore Required Fields Validation?,File Viewable by Provider,File Key,Note,User,TimeStamp
+Dr. John Smith,12345,NPI,Y,CA,Physician License,Y,12345ABC,Medical Doctor,MD,Y,Cardiology Board Certified,Active,1/15/2020,12/31/2025,T,T,N,T,12345678-1234-1234-1234-123456789012,Active physician license in good standing,admin@company.com,9/30/2025
+Dr. Sarah Wilson,67890,ProviderID,N,NY,Nurse Practitioner,Y,NP67890,Advanced Practice Nurse,,N,,Active,3/10/2019,6/30/2024,T,T,N,T,,Current practicing nurse practitioner,system,9/30/2025
+Dr. Michael Johnson,11111,InternalID,Y,TX,Medical License,Y,TX11111,Physician,MD,Y,,Active,7/1/2021,7/1/2026,F,F,Y,F,,,9/30/2025
