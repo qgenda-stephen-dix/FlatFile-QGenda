@@ -40,156 +40,33 @@ node --version  # Should show v20.x.x
 npm --version   # Should show 10.x.x
 ```
 
-## Step 3: Create GitHub Repository
+## Step 3: Clone the Project Repository
 
-1. Go to GitHub and create a new repository
-2. Name it `flatfile-qgenda` (or your preferred name)
-3. Create in your organization account for team access
-4. Clone locally:
+Clone the existing Flatfile-QGenda project repository:
 
 ```bash
-# Clone your repository
-git clone https://github.com/YOUR_ORG/flatfile-qgenda.git
-cd flatfile-qgenda
+# Clone the project repository
+git clone https://github.com/qgenda-stephen-dix/FlatFile-QGenda.git
+cd FlatFile-QGenda
 ```
 
-## Step 4: Set Up Project Structure
+## Step 4: Install Project Dependencies
 
-Create the basic Flatfile project files:
+Install all required Node.js packages:
 
 ```bash
-# Create package.json
-cat > package.json << 'EOF'
-{
-  "name": "qgenda",
-  "version": "1.0.0",
-  "description": "Flatfile QGenda Integration",
-  "main": "dist/index.js",
-  "engines": {
-    "node": ">=20.0.0"
-  },
-  "scripts": {
-    "dev": "flatfile develop src/index.ts",
-    "deploy": "flatfile deploy src/index.ts"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "@flatfile/api": "^1.19.0",
-    "@flatfile/http-logger": "^1.0.3",
-    "@flatfile/listener": "^1.1.1",
-    "@flatfile/plugin-export-workbook": "^5.2.3",
-    "@flatfile/plugin-job-handler": "^0.8.1",
-    "@flatfile/plugin-record-hook": "^1.11.2",
-    "@flatfile/plugin-space-configure": "^0.8.0",
-    "@flatfile/plugin-xlsx-extractor": "^4.0.5",
-    "flatfile": "^3.5.9",
-    "typescript": "^5.6.2"
-  },
-  "devDependencies": {
-    "@types/node": "^18.19.74"
-  }
-}
-EOF
+# Install all project dependencies
+npm install
+```
 
-# Create TypeScript configuration
-cat > tsconfig.json << 'EOF'
-{
-  "compilerOptions": {
-    "target": "ES2020",
-    "module": "commonjs",
-    "lib": ["ES2020"],
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true
-  },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
-}
-EOF
+**Note:** The project requires Node.js 22+. If you get engine warnings, upgrade Node.js:
 
-# Create source directory and basic listener
-mkdir -p src
-cat > src/index.ts << 'EOF'
-import { FlatfileListener } from '@flatfile/listener';
-import { configureSpace } from '@flatfile/plugin-space-configure';
-
-export default function (listener: FlatfileListener) {
-  // Configure your space and listeners here
-  console.log('Flatfile listener initialized');
-  
-  // Basic space configuration
-  listener.use(
-    configureSpace({
-      workbooks: [
-        {
-          name: 'QGenda Data',
-          sheets: [
-            {
-              name: 'Demographics',
-              slug: 'demographics',
-              fields: [
-                {
-                  key: 'firstName',
-                  type: 'string',
-                  label: 'First Name'
-                },
-                {
-                  key: 'lastName',
-                  type: 'string',
-                  label: 'Last Name'
-                },
-                {
-                  key: 'email',
-                  type: 'string',
-                  label: 'Email'
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    })
-  );
-}
-EOF
-
-# Create .gitignore
-cat > .gitignore << 'EOF'
-# Dependencies
-node_modules/
-npm-debug.log*
-
-# Environment variables
-.env
-.env.local
-.env.production
-
-# Build output
-dist/
-build/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
-logs/
-EOF
+```bash
+# Upgrade to Node.js 22 (if needed)
+brew uninstall node@20
+brew install node@22
+echo 'export PATH="/opt/homebrew/opt/node@22/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
 ```
 
 ## Step 5: Configure Environment Variables
