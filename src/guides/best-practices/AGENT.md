@@ -26,3 +26,10 @@
    - Use reference fields to maintain data relationships
    - Ensure referenced fields are unique
    - Document relationship requirements
+
+6. **Enum Field Configuration**
+   - **Always match enum labels to their values exactly**
+   - Use `{ value: "Y", label: "Y" }` not `{ value: "Y", label: "Yes" }`
+   - Use `{ value: "InternalID", label: "InternalID" }` not `{ value: "InternalID", label: "Internal ID" }`
+   - This ensures consistency in data processing and exports
+   - Prevents mapping issues during field transformations
