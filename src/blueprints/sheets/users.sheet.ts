@@ -13,7 +13,7 @@ export const usersSheet: Flatfile.SheetConfig = {
     {
       key: "name2",
       type: "string",
-      label: "Name2",
+      label: "Name2_AUTO_UPDATE_TEST_SUCCESS",
     },
   ],
   actions: [reverseNameAction],

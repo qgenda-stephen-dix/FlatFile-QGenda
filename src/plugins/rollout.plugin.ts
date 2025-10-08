@@ -8,7 +8,9 @@ export const rolloutPlugin = rollout({
   namespace: "workbook:qgenda-company",
   dev: true, // Enable updates when the development listener environment is restarted
   updater: async (space: Flatfile.Space, workbooks: Flatfile.Workbook[]) => {
-    console.log(`Starting rollout update for space ${space.id} with ${workbooks.length} workbook(s)`);
+    console.log(`[ROLLOUT] Starting update for space ${space.id} (${space.name}) with ${workbooks.length} workbook(s)`);
+    console.log(`[ROLLOUT] Space namespace: ${space.namespace}`);
+    console.log(`[ROLLOUT] Space metadata:`, JSON.stringify(space.metadata, null, 2));
     
     const updatedWorkbooks: Flatfile.Workbook[] = [];
     
@@ -24,9 +26,20 @@ export const rolloutPlugin = rollout({
           namespace: companyWorkbook.namespace
         });
         
-        // For sheet updates, we'll rely on the space configuration listener
-        // to handle schema changes when workbooks are updated, rather than
-        // trying to update individual sheets here
+        // Force space reconfiguration by updating space metadata
+        console.log(`[ROLLOUT] Updating space metadata to force reconfiguration`);
+        try {
+          await api.spaces.update(space.id, {
+            metadata: {
+              ...space.metadata,
+              version: `2.1.0-rollout-${Date.now()}`,
+              lastUpdated: new Date().toISOString()
+            }
+          });
+          console.log(`[ROLLOUT] ✅ Updated space metadata to trigger reconfiguration`);
+        } catch (spaceError) {
+          console.error(`[ROLLOUT] ❌ Failed to update space metadata:`, spaceError);
+        }
         
         console.log(`Successfully updated workbook ${workbook.id}`);
         updatedWorkbooks.push(workbook);
