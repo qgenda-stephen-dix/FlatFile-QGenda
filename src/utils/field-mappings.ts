@@ -8,6 +8,15 @@ import { affiliationSheet } from "../blueprints/sheets/affiliation.sheet";
 import { otherCertificationSheet } from "../blueprints/sheets/other-certification.sheet";
 import { malpracticeInsuranceSheet } from "../blueprints/sheets/malpractice-insurance.sheet";
 import { educationGapSheet } from "../blueprints/sheets/education-gap.sheet";
+import { payerLocationsSheet } from "../blueprints/sheets/payer-locations.sheet";
+import { payerSheet } from "../blueprints/sheets/payer.sheet";
+import { cdsCertificateSheet } from "../blueprints/sheets/cds-certificate.sheet";
+import { cmeSheet } from "../blueprints/sheets/cme.sheet";
+import { educationSheet } from "../blueprints/sheets/education.sheet";
+import { providerAppointmentDatesSheet } from "../blueprints/sheets/provider-appointment-dates.sheet";
+import { providerLocationDetailsSheet } from "../blueprints/sheets/provider-location-details.sheet";
+import { providerPayerEnrollmentDatesSheet } from "../blueprints/sheets/provider-payer-enrollment-dates.sheet";
+import { locationSheet } from "../blueprints/sheets/location.sheet";
 
 // Generate field mappings from all sheet configurations
 export function generateFieldMappings(): { [key: string]: string } {
@@ -21,7 +30,16 @@ export function generateFieldMappings(): { [key: string]: string } {
     affiliationSheet,
     otherCertificationSheet,
     malpracticeInsuranceSheet,
-    educationGapSheet
+    educationGapSheet,
+    payerLocationsSheet,
+    payerSheet,
+    cdsCertificateSheet,
+    cmeSheet,
+    educationSheet,
+    providerAppointmentDatesSheet,
+    providerLocationDetailsSheet,
+    providerPayerEnrollmentDatesSheet,
+    locationSheet
   ];
 
   const mappings: { [key: string]: string } = {};

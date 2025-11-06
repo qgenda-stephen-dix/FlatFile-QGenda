@@ -10,12 +10,21 @@ import { boardCertificationSheet } from "../sheets/board-certification.sheet";
 import { otherCertificationSheet } from "../sheets/other-certification.sheet";
 import { malpracticeInsuranceSheet } from "../sheets/malpractice-insurance.sheet";
 import { educationGapSheet } from "../sheets/education-gap.sheet";
+import { payerLocationsSheet } from "../sheets/payer-locations.sheet";
+import { payerSheet } from "../sheets/payer.sheet";
+import { cdsCertificateSheet } from "../sheets/cds-certificate.sheet";
+import { cmeSheet } from "../sheets/cme.sheet";
+import { educationSheet } from "../sheets/education.sheet";
+import { providerAppointmentDatesSheet } from "../sheets/provider-appointment-dates.sheet";
+import { providerLocationDetailsSheet } from "../sheets/provider-location-details.sheet";
+import { providerPayerEnrollmentDatesSheet } from "../sheets/provider-payer-enrollment-dates.sheet";
+import { locationSheet } from "../sheets/location.sheet";
 
 export const companyWorkbook: Flatfile.CreateWorkbookConfig = {
   name: "Company Workbook",
   namespace: "workbook:qgenda-company",
   labels: [ "pinned" ],
-  sheets: [ usersSheet, demographicSheet, demographicV2Sheet, demographicReferenceSheet, stateLicenseSheet, deaLicenseSheet, affiliationSheet, boardCertificationSheet, otherCertificationSheet, malpracticeInsuranceSheet, educationGapSheet ],
+  sheets: [ usersSheet, demographicSheet, demographicV2Sheet, demographicReferenceSheet, stateLicenseSheet, deaLicenseSheet, affiliationSheet, boardCertificationSheet, otherCertificationSheet, malpracticeInsuranceSheet, educationGapSheet, payerLocationsSheet, payerSheet, cdsCertificateSheet, cmeSheet, educationSheet, providerAppointmentDatesSheet, providerLocationDetailsSheet, providerPayerEnrollmentDatesSheet, locationSheet ],
   actions: [ {
     operation: "downloadWorkbook",
     mode: "foreground",

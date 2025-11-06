@@ -1,0 +1,4 @@
+Payer Name,Payer Key,Location Name,Location Key,X1,X2,X3,X4,X5,X6,X7,X8,X9,X10
+Blue Cross Blue Shield,12345678-1234-1234-1234-123456789012,Main Hospital,87654321-4321-4321-4321-210987654321,Sample X1,Sample X2,Sample X3,Sample X4,Sample X5,Sample X6,Sample X7,Sample X8,Sample X9,Sample X10
+Aetna Health,ABCDEFGH-IJKL-MNOP-QRST-UVWXYZABCDEF,Clinic North,FEDCBA09-8765-4321-0987-654321FEDCBA,Value 1,Value 2,Value 3,Value 4,Value 5,Value 6,Value 7,Value 8,Value 9,Value 10
+Cigna Healthcare,11111111-2222-3333-4444-555555555555,Surgery Center,AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE,Test 1,Test 2,Test 3,Test 4,Test 5,Test 6,Test 7,Test 8,Test 9,Test 10

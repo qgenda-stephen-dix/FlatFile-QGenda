@@ -26,6 +26,24 @@ import { debugSpacesListener } from "./listeners/debug-spaces.listener";
 import { malpracticeDeduplicationAction } from "./blueprints/actions/malpractice-deduplication.action";
 import { educationGapValidationHook } from "./listeners/education-gap-validation.listener";
 import { validateEducationGapAction } from "./blueprints/actions/validate-education-gap.action";
+import { payerLocationsValidationHook } from "./listeners/payer-locations-validation.listener";
+import { validatePayerLocationsAction } from "./blueprints/actions/validate-payer-locations.action";
+import { payerValidationHook } from "./listeners/payer-validation.listener";
+import { validatePayerAction } from "./blueprints/actions/validate-payer.action";
+import { cdsCertificateValidationHook } from "./listeners/cds-certificate-validation.listener";
+import { validateCDSCertificateAction } from "./blueprints/actions/validate-cds-certificate.action";
+import { cmeValidationHook } from "./listeners/cme-validation.listener";
+import { validateCMEAction } from "./blueprints/actions/validate-cme.action";
+import { educationValidationHook } from "./listeners/education-validation.listener";
+import { validateEducationAction } from "./blueprints/actions/validate-education.action";
+import { providerAppointmentDatesValidationHook } from "./listeners/provider-appointment-dates-validation.listener";
+import { validateProviderAppointmentDatesAction } from "./blueprints/actions/validate-provider-appointment-dates.action";
+import { providerLocationDetailsValidationHook } from "./listeners/provider-location-details-validation.listener";
+import { validateProviderLocationDetailsAction } from "./blueprints/actions/validate-provider-location-details.action";
+import { providerPayerEnrollmentDatesValidationHook } from "./listeners/provider-payer-enrollment-dates-validation.listener";
+import { validateProviderPayerEnrollmentDatesAction } from "./blueprints/actions/validate-provider-payer-enrollment-dates.action";
+import { locationValidationHook } from "./listeners/location-validation.listener";
+import { validateLocationAction } from "./blueprints/actions/validate-location.action";
 
 export default function (listener: FlatfileListener) {
   // Generate field mappings dynamically from sheet configurations
@@ -60,6 +78,24 @@ export default function (listener: FlatfileListener) {
   listener.use(validateMalpracticeInsuranceAction);
   listener.use(educationGapValidationHook);
   listener.use(validateEducationGapAction);
+  listener.use(payerLocationsValidationHook);
+  listener.use(validatePayerLocationsAction);
+  listener.use(payerValidationHook);
+  listener.use(validatePayerAction);
+  listener.use(cdsCertificateValidationHook);
+  listener.use(validateCDSCertificateAction);
+  listener.use(cmeValidationHook);
+  listener.use(validateCMEAction);
+  listener.use(educationValidationHook);
+  listener.use(validateEducationAction);
+  listener.use(providerAppointmentDatesValidationHook);
+  listener.use(validateProviderAppointmentDatesAction);
+  listener.use(providerLocationDetailsValidationHook);
+  listener.use(validateProviderLocationDetailsAction);
+  listener.use(providerPayerEnrollmentDatesValidationHook);
+  listener.use(validateProviderPayerEnrollmentDatesAction);
+  listener.use(locationValidationHook);
+  listener.use(validateLocationAction);
   listener.use(debugSpacesListener);  // Add debug listener
 
   // Add malpractice insurance deduplication action

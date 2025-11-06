@@ -164330,6 +164330,338 @@ exports.validateAffiliationAction = (0, plugin_job_handler_1.jobHandler)("sheet:
 
 /***/ }),
 
+/***/ 11172:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.validateCDSCertificateAction = void 0;
+const validateCDSCertificateAction = (listener) => {
+    listener.on("job:ready", { job: "sheet:validateCDSCertificate" }, async ({ context: { jobId, sheetId }, ...event }) => {
+        try {
+            const { data: records } = await event.data;
+            // Track License Number + State combinations for duplicate detection
+            const seenCombinations = new Map();
+            const validatedRecords = records.map((record, index) => {
+                const externalId = record.get("external_id");
+                const externalIdType = record.get("external_id_type");
+                const autoVerify = record.get("auto_verify");
+                const licenseNumber = record.get("license_number");
+                const state = record.get("state");
+                const schedule = record.get("schedule");
+                const status = record.get("status");
+                const disciplineOnFile = record.get("discipline_on_file");
+                const issueDate = record.get("issue_date");
+                const expirationDate = record.get("expiration_date");
+                const monitorExpirationDate = record.get("monitor_expiration_date");
+                const recordViewableByProvider = record.get("record_viewable_by_provider");
+                const fileViewableByProvider = record.get("file_viewable_by_provider");
+                const ignoreRequiredFieldsValidation = record.get("ignore_required_fields_validation");
+                const fileKey = record.get("file_key");
+                const note = record.get("note");
+                const user = record.get("user");
+                const timestamp = record.get("timestamp");
+                const currentRowNumber = index + 1;
+                // Duplicate checking on License Number and State
+                if (licenseNumber?.trim() && state?.trim()) {
+                    const combination = `${licenseNumber.trim()}|${state.trim()}`;
+                    if (seenCombinations.has(combination)) {
+                        const firstOccurrence = seenCombinations.get(combination);
+                        record.addError("license_number", `Line ${currentRowNumber} failed because attempting to populate same record as Line ${firstOccurrence}.`);
+                    }
+                    else {
+                        seenCombinations.set(combination, currentRowNumber);
+                    }
+                }
+                // Apply all the same validations from the listener
+                // Required field validations
+                if (!externalId?.trim()) {
+                    record.addError("external_id", "External Id required");
+                }
+                if (!externalIdType?.trim()) {
+                    record.addError("external_id_type", "External Id Type required");
+                }
+                if (!autoVerify?.trim()) {
+                    record.addError("auto_verify", "Auto-Verify? must be Y or N");
+                }
+                if (!licenseNumber?.trim()) {
+                    record.addError("license_number", "License Number required");
+                }
+                if (!state?.trim()) {
+                    record.addError("state", "State required");
+                }
+                if (!expirationDate?.trim()) {
+                    record.addError("expiration_date", "Expiration Date required");
+                }
+                // Y/N validations
+                if (autoVerify?.trim() && !["Y", "N"].includes(autoVerify.trim())) {
+                    record.addError("auto_verify", "Auto-Verify? must be Y or N");
+                }
+                if (disciplineOnFile?.trim() && !["Y", "N"].includes(disciplineOnFile.trim())) {
+                    record.addError("discipline_on_file", "Discipline on File? must be Y or N");
+                }
+                if (ignoreRequiredFieldsValidation?.trim() && !["Y", "N"].includes(ignoreRequiredFieldsValidation.trim())) {
+                    record.addError("ignore_required_fields_validation", "Ignore Required Fields Validation? must be Y or N");
+                }
+                // T/F validations
+                if (monitorExpirationDate?.trim() && !["T", "F"].includes(monitorExpirationDate.trim())) {
+                    record.addError("monitor_expiration_date", "Monitor Expiration Date must be T or F");
+                }
+                if (recordViewableByProvider?.trim() && !["T", "F"].includes(recordViewableByProvider.trim())) {
+                    record.addError("record_viewable_by_provider", "Record Viewable by Provider must be T or F");
+                }
+                if (fileViewableByProvider?.trim() && !["T", "F"].includes(fileViewableByProvider.trim())) {
+                    record.addError("file_viewable_by_provider", "File Viewable by Provider must be T or F");
+                }
+                // Cross-field validation for viewable fields
+                if ((recordViewableByProvider?.trim() || fileViewableByProvider?.trim())) {
+                    if (!recordViewableByProvider?.trim() || !fileViewableByProvider?.trim()) {
+                        record.addError("record_viewable_by_provider", "If one of Record Viewable by Provider or File Viewable by Provider are imported, the other must also be imported");
+                    }
+                }
+                // Warning for viewable fields logic
+                if (recordViewableByProvider === "F" && fileViewableByProvider === "T") {
+                    record.addInfo("file_viewable_by_provider", "File Viewable by Provider must be set to 'F' on records where Record Viewable by Provider is set to 'F'");
+                }
+                // Date format validation (m/d/yyyy)
+                const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+                if (issueDate?.trim() && !dateRegex.test(issueDate.trim())) {
+                    record.addError("issue_date", "Issue Date must be formatted as m/d/yyyy");
+                }
+                if (expirationDate?.trim() && !dateRegex.test(expirationDate.trim())) {
+                    record.addError("expiration_date", "Expiration Date must be formatted as m/d/yyyy");
+                }
+                if (timestamp?.trim() && !dateRegex.test(timestamp.trim())) {
+                    record.addError("timestamp", "Timestamp must be formatted as m/d/yyyy");
+                }
+                // Date logic validation (issue date before expiration date)
+                if (issueDate?.trim() && expirationDate?.trim()) {
+                    try {
+                        const issue = new Date(issueDate);
+                        const expiration = new Date(expirationDate);
+                        if (issue >= expiration) {
+                            record.addError("issue_date", "Issue Date must be before Expiration Date");
+                        }
+                    }
+                    catch {
+                        // Date parsing errors already handled by format validation
+                    }
+                }
+                // GUID format validation for File Key
+                const guidRegex = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/i;
+                if (fileKey?.trim() && !guidRegex.test(fileKey.trim())) {
+                    record.addError("file_key", "File Key must be a valid GUID");
+                }
+                // Character limit validation
+                if (note && note.length > 10000) {
+                    record.addError("note", "Note exceeds character limit of 10000");
+                }
+                // Warning for empty user field
+                if (!user?.trim()) {
+                    record.addInfo("user", "No User listed, so 'Credentialing System' will be listed");
+                }
+                // TODO: Implement API-based validations:
+                // 1. External ID Type validation against acceptable options
+                // if (externalIdType?.trim()) {
+                //   const validExternalIdTypes = ['NPI', 'SSN', 'Custom']; // Get from API
+                //   if (!validExternalIdTypes.includes(externalIdType.trim())) {
+                //     record.addError("external_id_type", "External ID Type not valid");
+                //   }
+                // }
+                // 2. State validation against state dropdown
+                // if (state?.trim()) {
+                //   const validStates = ['AL', 'AK', 'AZ', ...]; // Get from API
+                //   if (!validStates.includes(state.trim())) {
+                //     record.addError("state", "State not supported");
+                //   }
+                // }
+                // 3. Schedule validation
+                // if (schedule?.trim()) {
+                //   const scheduleValues = schedule.split('|').map(s => s.trim());
+                //   const validSchedules = ['1', '2', '3', '3N', '4', '5']; // Get from API
+                //   const invalidSchedules = scheduleValues.filter(s => !validSchedules.includes(s));
+                //   if (invalidSchedules.length > 0) {
+                //     record.addError("schedule", "At least one Schedule value not supported");
+                //   }
+                // }
+                // 4. Status validation
+                // if (status?.trim()) {
+                //   const validStatuses = ['Active', 'Inactive', 'Pending']; // Get from API
+                //   if (!validStatuses.includes(status.trim())) {
+                //     record.addError("status", "Status not supported");
+                //   }
+                // }
+                // 5. File Key business logic validations
+                // 6. User validation against Cred Spec emails
+                return record;
+            });
+            await event.data(validatedRecords);
+        }
+        catch (error) {
+            console.error("Error in CDS Certificate validation:", error);
+            throw error;
+        }
+    });
+};
+exports.validateCDSCertificateAction = validateCDSCertificateAction;
+
+
+/***/ }),
+
+/***/ 98612:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.validateCMEAction = void 0;
+const validateCMEAction = (listener) => {
+    listener.on("job:ready", { job: "sheet:validateCME" }, async ({ context: { jobId, sheetId }, ...event }) => {
+        try {
+            const { data: records } = await event.data;
+            // Track duplicates by External ID + External ID Type combination
+            const duplicateTracker = new Map();
+            records.forEach((record) => {
+                const externalId = record.get("externalId");
+                const externalIdType = record.get("externalIdType");
+                if (externalId && externalIdType) {
+                    const key = `${externalIdType}:${externalId}`;
+                    if (!duplicateTracker.has(key)) {
+                        duplicateTracker.set(key, []);
+                    }
+                    duplicateTracker.get(key).push(record);
+                }
+            });
+            // Process duplicate detection
+            duplicateTracker.forEach((duplicateRecords, key) => {
+                if (duplicateRecords.length > 1) {
+                    duplicateRecords.forEach((record) => {
+                        record.addError("externalId", `Duplicate records exist in file with same External ID Type and External ID combination`);
+                    });
+                }
+            });
+            const validatedRecords = records.map((record) => {
+                // Get field values for business rule validation
+                const name = record.get("name");
+                const externalId = record.get("externalId");
+                const externalIdType = record.get("externalIdType");
+                const category = record.get("category");
+                const cmeContents = record.get("cmeContents");
+                const credits = record.get("credits");
+                const cmeDescription = record.get("cmeDescription");
+                const completedOn = record.get("completedOn");
+                const validUntil = record.get("validUntil");
+                const states = record.get("states");
+                const recordViewableByProvider = record.get("recordViewableByProvider");
+                const frequency = record.get("frequency");
+                const hoursRequired = record.get("hoursRequired");
+                const fileViewableByProvider = record.get("fileViewableByProvider");
+                const fileKey = record.get("fileKey");
+                const note = record.get("note");
+                const user = record.get("user");
+                const timestamp = record.get("timestamp");
+                // Required field validations (same as listener)
+                if (!name?.trim()) {
+                    record.addError("name", "Name required");
+                }
+                if (!externalId?.trim()) {
+                    record.addError("externalId", "External Id required");
+                }
+                if (!externalIdType?.trim()) {
+                    record.addError("externalIdType", "External Id Type required");
+                }
+                // Character limit validations
+                if (name && name.length > 100) {
+                    record.addError("name", "Name exceeds character limit of 100");
+                }
+                if (cmeContents && cmeContents.length > 100) {
+                    record.addError("cmeContents", "CME Contents exceeds character limit of 100");
+                }
+                if (cmeDescription && cmeDescription.length > 500) {
+                    record.addError("cmeDescription", "CME Description exceeds character limit of 500");
+                }
+                if (note && note.length > 10000) {
+                    record.addError("note", "Note exceeds character limit of 10000");
+                }
+                // Credits validation
+                if (credits) {
+                    const creditsNumeric = /^\d*\.?\d*$/.test(credits);
+                    if (!creditsNumeric) {
+                        record.addError("credits", "Credits must be a number");
+                    }
+                    if (credits.length > 6) {
+                        record.addError("credits", "Credits exceeds character limit of 6");
+                    }
+                }
+                // Date validations
+                const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+                if (completedOn) {
+                    if (!dateRegex.test(completedOn)) {
+                        record.addError("completedOn", "Completed On must be formatted as m/d/yyyy");
+                    }
+                }
+                if (validUntil) {
+                    if (!dateRegex.test(validUntil)) {
+                        record.addError("validUntil", "Valid Until must be formatted as m/d/yyyy");
+                    }
+                }
+                // T/F validations
+                if (recordViewableByProvider && recordViewableByProvider !== "T" && recordViewableByProvider !== "F") {
+                    record.addError("recordViewableByProvider", "Viewable by Provider must be T or F");
+                }
+                if (fileViewableByProvider && fileViewableByProvider !== "T" && fileViewableByProvider !== "F") {
+                    record.addError("fileViewableByProvider", "File Viewable by Provider must be T or F");
+                }
+                // Hours Required validation
+                if (hoursRequired) {
+                    const hoursNum = parseInt(hoursRequired);
+                    if (isNaN(hoursNum) || hoursNum < 1 || hoursNum > 50 || !Number.isInteger(hoursNum)) {
+                        record.addError("hoursRequired", "Hours Required must be a whole number 1-50");
+                    }
+                }
+                // GUID format validation
+                if (fileKey) {
+                    const guidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+                    if (!guidRegex.test(fileKey)) {
+                        record.addError("fileKey", "File Key must be a valid GUID");
+                    }
+                }
+                // Timestamp validation
+                if (timestamp) {
+                    const timestampRegex = /^\d{1,2}\/\d{1,2}\/\d{4} \d{1,2}:\d{2}:\d{2}$/;
+                    if (!timestampRegex.test(timestamp)) {
+                        record.addError("timestamp", "Timestamp must be formatted as m/d/yyyy h:mm:ss");
+                    }
+                }
+                // Business logic validations
+                // Date logic: Valid Until should be after Completed On
+                if (completedOn && validUntil) {
+                    const completedDate = new Date(completedOn);
+                    const validUntilDate = new Date(validUntil);
+                    if (validUntilDate <= completedDate) {
+                        record.addWarning("validUntil", "Valid Until date should be after Completed On date");
+                    }
+                }
+                // User warning
+                if (!user?.trim()) {
+                    record.addWarning("user", "No User listed, so \"Credentialing System\" will be listed");
+                }
+                return record;
+            });
+            await event.data(validatedRecords);
+        }
+        catch (error) {
+            console.error("Error in CME validation:", error);
+            throw error;
+        }
+    });
+};
+exports.validateCMEAction = validateCMEAction;
+
+
+/***/ }),
+
 /***/ 80761:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
@@ -164492,6 +164824,425 @@ const validateEducationGapAction = (listener) => {
     });
 };
 exports.validateEducationGapAction = validateEducationGapAction;
+
+
+/***/ }),
+
+/***/ 73116:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.validateEducationAction = void 0;
+const validateEducationAction = (listener) => {
+    listener.on("job:ready", { job: "sheet:validateEducation" }, async ({ context: { jobId, sheetId }, ...event }) => {
+        try {
+            const { data: records } = await event.data;
+            // Track duplicates by External ID + External ID Type combination
+            const duplicateTracker = new Map();
+            records.forEach((record) => {
+                const externalId = record.get("externalId");
+                const externalIdType = record.get("externalIdType");
+                if (externalId && externalIdType) {
+                    const key = `${externalIdType}:${externalId}`;
+                    if (!duplicateTracker.has(key)) {
+                        duplicateTracker.set(key, []);
+                    }
+                    duplicateTracker.get(key).push(record);
+                }
+            });
+            // Process duplicate detection
+            duplicateTracker.forEach((duplicateRecords, key) => {
+                if (duplicateRecords.length > 1) {
+                    duplicateRecords.forEach((record) => {
+                        record.addError("externalId", `Duplicate records exist in file with same External ID Type and External ID combination`);
+                    });
+                }
+            });
+            const validatedRecords = records.map((record) => {
+                // Get field values for business rule validation
+                const externalId = record.get("externalId");
+                const externalIdType = record.get("externalIdType");
+                const educationType = record.get("educationType");
+                const foreignGraduate = record.get("foreignGraduate");
+                const ecfmgNumber = record.get("ecfmgNumber");
+                const ecfmgIssueDate = record.get("ecfmgIssueDate");
+                const fifthPathwayNumber = record.get("fifthPathwayNumber");
+                const fifthPathwayIssueDate = record.get("fifthPathwayIssueDate");
+                const degree = record.get("degree");
+                const areaOfStudy = record.get("areaOfStudy");
+                const schoolName = record.get("schoolName");
+                const institutionEmail = record.get("institutionEmail");
+                const addressLine1 = record.get("addressLine1");
+                const addressLine2 = record.get("addressLine2");
+                const city = record.get("city");
+                const state = record.get("state");
+                const zip = record.get("zip");
+                const country = record.get("country");
+                const phone = record.get("phone");
+                const ext = record.get("ext");
+                const fax = record.get("fax");
+                const startDate = record.get("startDate");
+                const endDate = record.get("endDate");
+                const didYouGraduate = record.get("didYouGraduate");
+                const viewableByProvider = record.get("viewableByProvider");
+                const website = record.get("website");
+                const fileViewableByProvider = record.get("fileViewableByProvider");
+                const ignoreRequiredFieldsValidation = record.get("ignoreRequiredFieldsValidation");
+                const fileKey = record.get("fileKey");
+                const note = record.get("note");
+                const user = record.get("user");
+                const timestamp = record.get("timestamp");
+                // Required field validations (same as listener)
+                if (!externalId?.trim()) {
+                    record.addError("externalId", "External Id required");
+                }
+                if (!externalIdType?.trim()) {
+                    record.addError("externalIdType", "External Id Type required");
+                }
+                if (!educationType?.trim()) {
+                    record.addError("educationType", "Education Type not supported");
+                }
+                if (!degree?.trim()) {
+                    record.addError("degree", "Degree not supported");
+                }
+                // External ID validation - both must be provided together
+                if ((externalId && !externalIdType) || (!externalId && externalIdType)) {
+                    record.addError("externalId", "Must provide both External ID and External ID Type");
+                    record.addError("externalIdType", "Must provide both External ID and External ID Type");
+                }
+                // Education Type validation
+                const validEducationTypes = ["Bachelor's", "Master's", "Doctorate", "Medical School", "Professional School", "Fifth Pathway"];
+                if (educationType && !validEducationTypes.includes(educationType)) {
+                    record.addError("educationType", "Education Type not supported");
+                }
+                // T/F validations
+                if (foreignGraduate && foreignGraduate !== "T" && foreignGraduate !== "F") {
+                    record.addError("foreignGraduate", "Foreign Graduate must be T or F");
+                }
+                if (viewableByProvider && viewableByProvider !== "T" && viewableByProvider !== "F") {
+                    record.addError("viewableByProvider", "Viewable by Provider must be T or F");
+                }
+                if (fileViewableByProvider && fileViewableByProvider !== "T" && fileViewableByProvider !== "F") {
+                    record.addError("fileViewableByProvider", "File Viewable by Provider must be T or F");
+                }
+                // Y/N validations
+                if (didYouGraduate && didYouGraduate !== "Y" && didYouGraduate !== "N") {
+                    record.addError("didYouGraduate", "Did you graduate must be Y or N");
+                }
+                if (ignoreRequiredFieldsValidation && ignoreRequiredFieldsValidation !== "Y" && ignoreRequiredFieldsValidation !== "N") {
+                    record.addError("ignoreRequiredFieldsValidation", "Ignore Required Fields Validation? must be Y or N");
+                }
+                // Character limit validations
+                if (ecfmgNumber && ecfmgNumber.length > 8) {
+                    record.addError("ecfmgNumber", "ECFMG Number exceeds character limit of 8");
+                }
+                if (fifthPathwayNumber && fifthPathwayNumber.length > 50) {
+                    record.addError("fifthPathwayNumber", "Fifth Pathway Number exceeds character limit of 50");
+                }
+                if (areaOfStudy && areaOfStudy.length > 100) {
+                    record.addError("areaOfStudy", "Area of Study / Major exceeds character limit of 100");
+                }
+                if (schoolName && schoolName.length > 150) {
+                    record.addError("schoolName", "School Name exceeds character limit of 150");
+                }
+                // Date format validations
+                const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+                if (ecfmgIssueDate && !dateRegex.test(ecfmgIssueDate)) {
+                    record.addError("ecfmgIssueDate", "ECFMG Issue Date must be formatted as m/d/yyyy");
+                }
+                if (fifthPathwayIssueDate && !dateRegex.test(fifthPathwayIssueDate)) {
+                    record.addError("fifthPathwayIssueDate", "Fifth Pathway Issue Date must be formatted as m/d/yyyy");
+                }
+                if (startDate && !dateRegex.test(startDate)) {
+                    record.addError("startDate", "Start Date must be formatted as m/d/yyyy");
+                }
+                if (endDate && !dateRegex.test(endDate)) {
+                    record.addError("endDate", "End Date must be formatted as m/d/yyyy");
+                }
+                // Email validation
+                if (institutionEmail) {
+                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    if (!emailRegex.test(institutionEmail)) {
+                        record.addError("institutionEmail", "'Institution Email' is not a valid email address.");
+                    }
+                }
+                // URL validation
+                if (website) {
+                    const urlRegex = /^https?:\/\/[^\s$.?#].[^\s]*$/i;
+                    if (!urlRegex.test(website)) {
+                        record.addError("website", "Website is not a valid URL");
+                    }
+                }
+                // Phone/Fax validations
+                if (phone) {
+                    const phoneDigits = phone.replace(/\D/g, '');
+                    if (phone !== phoneDigits || ![9, 10, 12].includes(phoneDigits.length)) {
+                        record.addError("phone", "Phone Number must be 9, 10, or 12-digit number");
+                    }
+                }
+                if (fax) {
+                    const faxDigits = fax.replace(/\D/g, '');
+                    if (fax !== faxDigits || ![9, 10, 12].includes(faxDigits.length)) {
+                        record.addError("fax", "Fax must be 9, 10, or 12-digit number");
+                    }
+                }
+                // GUID format validation
+                if (fileKey) {
+                    const guidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+                    if (!guidRegex.test(fileKey)) {
+                        record.addError("fileKey", "File Key must be a valid GUID");
+                    }
+                }
+                // Timestamp validation
+                if (timestamp) {
+                    const timestampRegex = /^\d{1,2}\/\d{1,2}\/\d{4} \d{1,2}:\d{2}:\d{2}$/;
+                    if (!timestampRegex.test(timestamp)) {
+                        record.addError("timestamp", "Timestamp must be formatted as m/d/yyyy h:mm:ss");
+                    }
+                }
+                // Business logic validations
+                // Date logic: End Date should be after Start Date
+                if (startDate && endDate) {
+                    const startDateObj = new Date(startDate);
+                    const endDateObj = new Date(endDate);
+                    if (endDateObj <= startDateObj) {
+                        record.addWarning("endDate", "End Date should be after Start Date");
+                    }
+                }
+                // Education Type and Degree relationship validation
+                // This would require actual degree dropdown validation in real implementation
+                // User warning
+                if (!user?.trim()) {
+                    record.addWarning("user", "No User listed, so \"Credentialing System\" will be listed");
+                }
+                return record;
+            });
+            await event.data(validatedRecords);
+        }
+        catch (error) {
+            console.error("Error in Education validation:", error);
+            throw error;
+        }
+    });
+};
+exports.validateEducationAction = validateEducationAction;
+
+
+/***/ }),
+
+/***/ 91248:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.validateLocationAction = void 0;
+const validateLocationAction = (listener) => {
+    listener.on("job:ready", { job: "sheet:validate-location" }, async ({ context: { jobId, sheetId }, ...event }) => {
+        try {
+            const { data: records } = await event.data;
+            if (!records || records.length === 0) {
+                console.log("No Location records found to validate");
+                return;
+            }
+            console.log(`Processing ${records.length} location records`); // Track duplicates and validation issues
+            const duplicateExternalIds = new Set();
+            const duplicateLocationNames = new Set();
+            const duplicateLocationIds = new Set();
+            const externalIdCombos = new Map();
+            const locationNames = new Map();
+            const locationIdMap = new Map();
+            // First pass: identify duplicates
+            console.log("Checking for duplicates");
+            for (let i = 0; i < records.length; i++) {
+                const record = records[i];
+                const externalId = record.get("externalId");
+                const externalIdType = record.get("externalIdType");
+                const locationName = record.get("locationName");
+                const locationId = record.get("locationId");
+                // Check for duplicate External ID + External ID Type combinations
+                if (externalId && externalIdType) {
+                    const combo = `${externalId}_${externalIdType}`;
+                    if (externalIdCombos.has(combo)) {
+                        duplicateExternalIds.add(combo);
+                    }
+                    else {
+                        externalIdCombos.set(combo, i);
+                    }
+                }
+                // Check for duplicate Location Names
+                if (locationName) {
+                    const lowerLocationName = locationName.toLowerCase();
+                    if (locationNames.has(lowerLocationName)) {
+                        duplicateLocationNames.add(lowerLocationName);
+                    }
+                    else {
+                        locationNames.set(lowerLocationName, i);
+                    }
+                }
+                // Check for duplicate Location IDs within and across records
+                if (locationId) {
+                    const locationIds = locationId.split('|');
+                    for (const id of locationIds) {
+                        const trimmedId = id.trim();
+                        if (trimmedId) {
+                            if (locationIdMap.has(trimmedId)) {
+                                duplicateLocationIds.add(trimmedId);
+                            }
+                            else {
+                                locationIdMap.set(trimmedId, i);
+                            }
+                        }
+                    }
+                }
+            }
+            // Second pass: apply validations and errors
+            console.log("Applying validation results");
+            for (let i = 0; i < records.length; i++) {
+                const record = records[i];
+                const errors = [];
+                const warnings = [];
+                const externalId = record.get("externalId");
+                const externalIdType = record.get("externalIdType");
+                const locationName = record.get("locationName");
+                const locationId = record.get("locationId");
+                const locationCategory = record.get("locationCategory");
+                // Duplicate External ID + External ID Type validation
+                if (externalId && externalIdType) {
+                    const combo = `${externalId}_${externalIdType}`;
+                    if (duplicateExternalIds.has(combo)) {
+                        errors.push("Duplicate External ID and External ID Type combination found in file");
+                    }
+                }
+                // Duplicate Location Name validation
+                if (locationName) {
+                    const lowerLocationName = locationName.toLowerCase();
+                    if (duplicateLocationNames.has(lowerLocationName)) {
+                        errors.push("Location Name must be unique");
+                    }
+                }
+                // Duplicate Location ID validation
+                if (locationId) {
+                    const locationIds = locationId.split('|');
+                    const seenIdsInThisRecord = new Set();
+                    for (const id of locationIds) {
+                        const trimmedId = id.trim();
+                        if (trimmedId) {
+                            // Check for duplicates within the same record
+                            if (seenIdsInThisRecord.has(trimmedId)) {
+                                errors.push("Duplicate Location ID found within the same record");
+                            }
+                            else {
+                                seenIdsInThisRecord.add(trimmedId);
+                            }
+                            // Check for duplicates across records
+                            if (duplicateLocationIds.has(trimmedId)) {
+                                errors.push("Duplicate Location ID found");
+                            }
+                        }
+                    }
+                }
+                // External ID Type specific validations
+                if (externalIdType === "Location Key") {
+                    // UUID validation for Location Key
+                    if (externalId) {
+                        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+                        if (!uuidRegex.test(externalId)) {
+                            errors.push("Location Key formatted incorrectly");
+                        }
+                    }
+                }
+                else if (externalIdType === "Location ID") {
+                    // For Location ID type, verify all Location IDs match existing locations
+                    // This would typically require database lookup in a real implementation
+                    // For now, we'll add a placeholder validation
+                    if (locationId) {
+                        // This validation would check against existing locations in the database
+                        // errors.push("No matching Location found");
+                    }
+                }
+                // Location Category validation
+                if (locationCategory && !["", "Appointment", "Practice"].includes(locationCategory)) {
+                    errors.push("Location Category not supported");
+                }
+                // Business rule validations
+                const contactInformationSameAsCorporateEntity = record.get("contactInformationSameAsCorporateEntity");
+                const correspondenceSameAsCorporateEntity = record.get("correspondenceSameAsCorporateEntity");
+                const billingAddressSameAsCorporateEntity = record.get("billingAddressSameAsCorporateEntity");
+                const locationDetailIdsSameAsCorporateEntity = record.get("locationDetailIdsSameAsCorporateEntity");
+                // Warn about "Same as Corporate Entity" implications
+                if (contactInformationSameAsCorporateEntity === "Y") {
+                    warnings.push("Contact Information will be ignored and Corporate Entity values will be used");
+                }
+                if (correspondenceSameAsCorporateEntity === "Y") {
+                    warnings.push("Correspondence Information will be ignored and Corporate Entity values will be used");
+                }
+                if (billingAddressSameAsCorporateEntity === "Y") {
+                    warnings.push("Billing Address will be ignored and Corporate Entity values will be used");
+                }
+                if (locationDetailIdsSameAsCorporateEntity === "Y") {
+                    warnings.push("Location Detail IDs will be ignored and Corporate Entity values will be used");
+                }
+                // Operating hours validation - closed day logic
+                const dayClosedFields = [
+                    { closed: record.get("sundayClosed"), start: record.get("sundayStartTime"), end: record.get("sundayEndTime"), day: "Sunday" },
+                    { closed: record.get("mondayClosed"), start: record.get("mondayStartTime"), end: record.get("mondayEndTime"), day: "Monday" },
+                    { closed: record.get("tuesdayClosed"), start: record.get("tuesdayStartTime"), end: record.get("tuesdayEndTime"), day: "Tuesday" },
+                    { closed: record.get("wednesdayClosed"), start: record.get("wednesdayStartTime"), end: record.get("wednesdayEndTime"), day: "Wednesday" },
+                    { closed: record.get("thursdayClosed"), start: record.get("thursdayStartTime"), end: record.get("thursdayEndTime"), day: "Thursday" },
+                    { closed: record.get("fridayClosed"), start: record.get("fridayStartTime"), end: record.get("fridayEndTime"), day: "Friday" },
+                    { closed: record.get("saturdayClosed"), start: record.get("saturdayStartTime"), end: record.get("saturdayEndTime"), day: "Saturday" }
+                ];
+                for (const dayInfo of dayClosedFields) {
+                    if (dayInfo.closed === "Y" && (dayInfo.start || dayInfo.end)) {
+                        warnings.push(`${dayInfo.day} is marked as closed but has start or end times - times will be ignored`);
+                    }
+                }
+                // Country and State validation warnings for address sections
+                const addressSections = [
+                    {
+                        country: record.get("contactCountry"),
+                        state: record.get("contactStateProvince"),
+                        section: "Contact"
+                    },
+                    {
+                        country: record.get("correspondenceCountry"),
+                        state: record.get("correspondenceStateProvince"),
+                        section: "Correspondence"
+                    },
+                    {
+                        country: record.get("billingCountry"),
+                        state: record.get("billingStateProvince"),
+                        section: "Billing"
+                    }
+                ];
+                for (const addr of addressSections) {
+                    if (addr.country && addr.state) {
+                        // This would require country/state validation against database
+                        // For now, add a general validation message
+                        // warnings.push(`${addr.section} Country and State combination should be verified`);
+                    }
+                }
+                // Apply all errors to the record
+                for (const error of errors) {
+                    record.addError("*", error);
+                }
+                // Apply all warnings to the record
+                for (const warning of warnings) {
+                    record.addWarning("*", warning);
+                }
+            }
+            console.log(`Location validation completed for ${records.length} records`);
+        }
+        catch (error) {
+            console.error("Location validation error:", error);
+            throw new Error(`Location validation failed: ${error.message}`);
+        }
+    });
+};
+exports.validateLocationAction = validateLocationAction;
 
 
 /***/ }),
@@ -164886,6 +165637,765 @@ const validateOtherCertificationAction = (listener) => {
     });
 };
 exports.validateOtherCertificationAction = validateOtherCertificationAction;
+
+
+/***/ }),
+
+/***/ 77262:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.validatePayerLocationsAction = void 0;
+const validatePayerLocationsAction = (listener) => {
+    listener.on("job:ready", { job: "sheet:validatePayerLocations" }, async ({ context: { jobId, sheetId }, ...event }) => {
+        try {
+            const { data: records } = await event.data;
+            // Track combinations seen in this file for duplicate detection
+            const seenCombinations = new Set();
+            const validatedRecords = records.map((record, index) => {
+                const payerName = record.get("payer_name");
+                const payerKey = record.get("payer_key");
+                const locationName = record.get("location_name");
+                const locationKey = record.get("location_key");
+                // GUID format regex: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX (8-4-4-4-12)
+                const guidRegex = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/i;
+                // Required field validations
+                if (!payerKey?.trim()) {
+                    record.addError("payer_key", "Payer Key required");
+                }
+                if (!locationKey?.trim()) {
+                    record.addError("location_key", "Location Key required");
+                }
+                // Payer Key GUID format validation
+                if (payerKey?.trim()) {
+                    if (!guidRegex.test(payerKey.trim())) {
+                        record.addError("payer_key", "Payer Key must be a valid GUID");
+                    }
+                }
+                // Location Key GUID format validation
+                if (locationKey?.trim()) {
+                    // Handle comma-delimited multiple location keys
+                    const locationKeys = locationKey.split(',').map(key => key.trim());
+                    for (const key of locationKeys) {
+                        if (key && !guidRegex.test(key)) {
+                            record.addError("location_key", "Location Keys must be a valid GUID. Multiple Keys must be comma-delimited.");
+                            break;
+                        }
+                    }
+                    // Check for duplicate combinations in file
+                    if (payerKey?.trim()) {
+                        const locationKeys = locationKey.split(',').map(key => key.trim());
+                        for (const locKey of locationKeys) {
+                            if (locKey) {
+                                const combination = `${payerKey.trim()}|${locKey}`;
+                                if (seenCombinations.has(combination)) {
+                                    record.addError("location_key", "Duplicate Payer and Location Key combination found.");
+                                }
+                                else {
+                                    seenCombinations.add(combination);
+                                }
+                            }
+                        }
+                    }
+                }
+                // TODO: Implement API-based validations:
+                // These would require calls to QGenda API to validate against existing data
+                // 1. Validate Payer Key exists in company
+                // if (payerKey && guidRegex.test(payerKey)) {
+                //   // API call to check if payer exists
+                //   // if (!payerExists) {
+                //   //   record.addError("payer_key", "No matching payer found.");
+                //   // }
+                //   // if (payerArchived) {
+                //   //   record.addInfo("payer_key", "Payer was archived in Settings. These payer-locations associations have been added as archived.");
+                //   // }
+                // }
+                // 2. Validate Location Key exists in company
+                // if (locationKey && validLocationKeys) {
+                //   // For each location key, check if it exists
+                //   // if (!locationExists) {
+                //   //   record.addError("location_key", `[Location Key ${locKey}] - No matching location found.`);
+                //   // }
+                //   // if (locationArchived) {
+                //   //   record.addInfo("location_key", "Data was updated, but location is archived in Settings");
+                //   // }
+                // }
+                // 3. Check for existing payer-location relationships
+                // if (existingRelationship) {
+                //   if (relationshipActive) {
+                //     record.addError("location_key", `[Location Key ${locKey}] has an active association with this Payer.`);
+                //   } else {
+                //     record.addInfo("location_key", `[Location Key ${locKey}] was archived for this Payer. This payer-location association has been updated to be un-archived.`);
+                //   }
+                // }
+                return record;
+            });
+            await event.data(validatedRecords);
+        }
+        catch (error) {
+            console.error("Error in Payer-Locations validation:", error);
+            throw error;
+        }
+    });
+};
+exports.validatePayerLocationsAction = validatePayerLocationsAction;
+
+
+/***/ }),
+
+/***/ 33926:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.validatePayerAction = void 0;
+const validatePayerAction = (listener) => {
+    listener.on("job:ready", { job: "sheet:validatePayer" }, async ({ context: { jobId, sheetId }, ...event }) => {
+        try {
+            const { data: records } = await event.data;
+            // Track Payer Name + Line of Business combinations for duplicate detection
+            const seenCombinations = new Map();
+            const validatedRecords = records.map((record, index) => {
+                const payerKey = record.get("payer_key");
+                const payerName = record.get("payer_name");
+                const planLineOfBusiness = record.get("plan_line_of_business");
+                const states = record.get("states");
+                const website = record.get("website");
+                const primaryContactName = record.get("primary_contact_name");
+                const primaryContactEmail = record.get("primary_contact_email");
+                const primaryContactPhone = record.get("primary_contact_phone");
+                const primaryContactPhoneExt = record.get("primary_contact_phone_ext");
+                const primaryContactFax = record.get("primary_contact_fax");
+                const secondaryContactName = record.get("secondary_contact_name");
+                const secondaryContactEmail = record.get("secondary_contact_email");
+                const secondaryContactPhone = record.get("secondary_contact_phone");
+                const secondaryContactPhoneExt = record.get("secondary_contact_phone_ext");
+                const secondaryContactFax = record.get("secondary_contact_fax");
+                const generalNotes = record.get("general_notes");
+                const instructions = record.get("instructions");
+                const lineOfBusinessNotes = record.get("line_of_business_notes");
+                const locationKeys = record.get("location_keys");
+                const currentRowNumber = index + 1;
+                // Duplicate Payer Name + Line of Business combination check
+                if (payerName?.trim() && planLineOfBusiness?.trim()) {
+                    const combination = `${payerName.trim()}|${planLineOfBusiness.trim()}`;
+                    if (seenCombinations.has(combination)) {
+                        const firstOccurrence = seenCombinations.get(combination);
+                        record.addError("plan_line_of_business", `Line ${currentRowNumber} failed because attempting to populate same record as Line ${firstOccurrence}.`);
+                    }
+                    else {
+                        seenCombinations.set(combination, currentRowNumber);
+                    }
+                }
+                // Apply all the same validations from the listener
+                // Required field validation
+                if (!payerName?.trim()) {
+                    record.addError("payer_name", "Payer Name required");
+                }
+                // Character limit validations
+                if (payerName && payerName.length > 100) {
+                    record.addError("payer_name", "Payer Name exceeds character limit of 100.");
+                }
+                if (planLineOfBusiness && planLineOfBusiness.length > 100) {
+                    record.addError("plan_line_of_business", "Plan/Line of Business exceeds character limit of 100.");
+                }
+                if (website && website.length > 2047) {
+                    record.addError("website", "Website exceeds character limit of 2047");
+                }
+                if (primaryContactName && primaryContactName.length > 50) {
+                    record.addError("primary_contact_name", "Primary Contact Name exceeds character limit of 50.");
+                }
+                if (primaryContactEmail && primaryContactEmail.length > 100) {
+                    record.addError("primary_contact_email", "Primary Contact Email exceeds character limit of 100.");
+                }
+                if (secondaryContactName && secondaryContactName.length > 50) {
+                    record.addError("secondary_contact_name", "Secondary Contact Name exceeds character limit of 50.");
+                }
+                if (secondaryContactEmail && secondaryContactEmail.length > 100) {
+                    record.addError("secondary_contact_email", "Secondary Contact Email exceeds character limit of 100.");
+                }
+                if (generalNotes && generalNotes.length > 10000) {
+                    record.addError("general_notes", "General Notes exceeds character limit of 10000.");
+                }
+                if (instructions && instructions.length > 10000) {
+                    record.addError("instructions", "Instructions exceeds character limit of 10000.");
+                }
+                if (lineOfBusinessNotes && lineOfBusinessNotes.length > 10000) {
+                    record.addError("line_of_business_notes", "Line of Business Notes exceeds character limit of 10000.");
+                }
+                // Email format validation
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (primaryContactEmail?.trim() && !emailRegex.test(primaryContactEmail.trim())) {
+                    record.addError("primary_contact_email", "Primary Contact Email is not a valid email.");
+                }
+                if (secondaryContactEmail?.trim() && !emailRegex.test(secondaryContactEmail.trim())) {
+                    record.addError("secondary_contact_email", "Secondary Contact Email is not a valid email.");
+                }
+                // Phone number validation (9, 10, or 12 digits only)
+                const phoneRegex = /^[0-9]{9}$|^[0-9]{10}$|^[0-9]{12}$/;
+                if (primaryContactPhone?.trim() && !phoneRegex.test(primaryContactPhone.trim())) {
+                    record.addError("primary_contact_phone", "Primary Contact Phone must be 9, 10, or 12-digit number");
+                }
+                if (primaryContactFax?.trim() && !phoneRegex.test(primaryContactFax.trim())) {
+                    record.addError("primary_contact_fax", "Primary Contact Fax must be 9, 10, or 12-digit number");
+                }
+                if (secondaryContactPhone?.trim() && !phoneRegex.test(secondaryContactPhone.trim())) {
+                    record.addError("secondary_contact_phone", "Secondary Contact Phone must be 9, 10, or 12-digit number");
+                }
+                if (secondaryContactFax?.trim() && !phoneRegex.test(secondaryContactFax.trim())) {
+                    record.addError("secondary_contact_fax", "Secondary Contact Fax must be 9, 10, or 12-digit number");
+                }
+                // Phone extension validation (number up to 20 digits)
+                const extensionRegex = /^[0-9]{1,20}$/;
+                if (primaryContactPhoneExt?.trim() && !extensionRegex.test(primaryContactPhoneExt.trim())) {
+                    record.addError("primary_contact_phone_ext", "Primary Contact Phone Ext.' must be a number up to 20 digits in length");
+                }
+                if (secondaryContactPhoneExt?.trim() && !extensionRegex.test(secondaryContactPhoneExt.trim())) {
+                    record.addError("secondary_contact_phone_ext", "Secondary Contact Phone Ext.' must be a number up to 20 digits in length");
+                }
+                // URL validation
+                if (website?.trim()) {
+                    try {
+                        new URL(website.trim());
+                    }
+                    catch {
+                        record.addError("website", "URL not valid");
+                    }
+                }
+                // GUID validation for location keys
+                const guidRegex = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/i;
+                if (locationKeys?.trim()) {
+                    const keys = locationKeys.split(',').map(key => key.trim());
+                    for (const key of keys) {
+                        if (key && !guidRegex.test(key)) {
+                            record.addError("location_keys", "Location Key must be a valid GUID. Multiple Keys must be comma-delimited.");
+                            break;
+                        }
+                    }
+                }
+                // TODO: Implement API-based validations:
+                // 1. Check if Payer Name + Line of Business already exists in company
+                // if (payerName && planLineOfBusiness) {
+                //   // API call to check existing payers
+                //   // if (payerExists) {
+                //   //   record.addError("payer_name", "Payer already exists in company.");
+                //   // }
+                // }
+                // 2. Validate location keys exist in company
+                // if (locationKeys?.trim()) {
+                //   const keys = locationKeys.split(',').map(key => key.trim());
+                //   for (const key of keys) {
+                //     if (key && guidRegex.test(key)) {
+                //       // API call to validate location exists
+                //       // if (!locationExists) {
+                //       //   record.addError("location_keys", "No matching location found.");
+                //       // }
+                //     }
+                //   }
+                // }
+                return record;
+            });
+            await event.data(validatedRecords);
+        }
+        catch (error) {
+            console.error("Error in Payer validation:", error);
+            throw error;
+        }
+    });
+};
+exports.validatePayerAction = validatePayerAction;
+
+
+/***/ }),
+
+/***/ 93027:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.validateProviderAppointmentDatesAction = void 0;
+const validateProviderAppointmentDatesAction = (listener) => {
+    listener.on("job:ready", { job: "sheet:validateProviderAppointmentDates" }, async ({ context: { jobId, sheetId }, ...event }) => {
+        try {
+            const { data: records } = await event.data;
+            // Track duplicates by External ID + External ID Type combination
+            const duplicateTracker = new Map();
+            records.forEach((record) => {
+                const externalId = record.get("externalId");
+                const externalIdType = record.get("externalIdType");
+                if (externalId && externalIdType) {
+                    const key = `${externalIdType}:${externalId}`;
+                    if (!duplicateTracker.has(key)) {
+                        duplicateTracker.set(key, []);
+                    }
+                    duplicateTracker.get(key).push(record);
+                }
+            });
+            // Process duplicate detection
+            duplicateTracker.forEach((duplicateRecords, key) => {
+                if (duplicateRecords.length > 1) {
+                    duplicateRecords.forEach((record) => {
+                        record.addError("externalId", `Duplicate records exist in file with same External ID Type and External ID combination`);
+                    });
+                }
+            });
+            const validatedRecords = records.map((record) => {
+                // Get field values for business rule validation
+                const externalId = record.get("externalId");
+                const externalIdType = record.get("externalIdType");
+                const locationKey = record.get("locationKey");
+                const workflowType = record.get("workflowType");
+                const workflowKey = record.get("workflowKey");
+                const resolution = record.get("resolution");
+                const locationEmploymentType = record.get("locationEmploymentType");
+                const appointmentDate = record.get("appointmentDate");
+                const reappointmentDate = record.get("reappointmentDate");
+                const reappointmentNotificationDate = record.get("reappointmentNotificationDate");
+                const inactiveDate = record.get("inactiveDate");
+                const notes = record.get("notes");
+                const providerCategory = record.get("providerCategory");
+                // Required field validations (same as listener)
+                if (!locationKey?.trim()) {
+                    record.addError("locationKey", "Location Key required");
+                }
+                if (!workflowType?.trim()) {
+                    record.addError("workflowType", "Workflow Type required");
+                }
+                if (!workflowKey?.trim()) {
+                    record.addError("workflowKey", "Workflow Key required");
+                }
+                if (!externalId?.trim()) {
+                    record.addError("externalId", "External Id required");
+                }
+                if (!externalIdType?.trim()) {
+                    record.addError("externalIdType", "External Id Type required");
+                }
+                // External ID validation - both must be provided together
+                if ((externalId && !externalIdType) || (!externalId && externalIdType)) {
+                    record.addError("externalId", "Must provide both External ID and External ID Type");
+                    record.addError("externalIdType", "Must provide both External ID and External ID Type");
+                }
+                // External ID Type validation
+                const validExternalIdTypes = ["NPI", "InternalID", "ProviderID", "EmrID", "BillingSystemID"];
+                if (externalIdType && !validExternalIdTypes.includes(externalIdType)) {
+                    record.addError("externalIdType", "External ID Type not valid");
+                }
+                // GUID format validations
+                const guidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+                if (locationKey && !guidRegex.test(locationKey)) {
+                    record.addError("locationKey", "Location Key must be a valid GUID");
+                }
+                if (workflowKey && !guidRegex.test(workflowKey)) {
+                    record.addError("workflowKey", "Workflow Key must be a valid GUID");
+                }
+                // Workflow Type validation
+                const validWorkflowTypes = ["Appointment", "Provider - Location Termination"];
+                if (workflowType && !validWorkflowTypes.includes(workflowType)) {
+                    record.addError("workflowType", "Workflow Type not supported");
+                }
+                // Resolution validation based on Workflow Type
+                if (workflowType === "Appointment") {
+                    if (!resolution?.trim()) {
+                        record.addError("resolution", "Resolution required");
+                    }
+                    else {
+                        const validResolutions = ["Approved", "Withdrawn", "Denied", "Approved - Historical Only"];
+                        if (!validResolutions.includes(resolution)) {
+                            record.addError("resolution", "Resolution not supported");
+                        }
+                    }
+                }
+                else if (workflowType === "Provider - Location Termination") {
+                    if (resolution?.trim()) {
+                        record.addError("resolution", "Resolution can only be input if Workflow Type is Appointment");
+                    }
+                }
+                // Date format validations
+                const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+                if (appointmentDate) {
+                    if (!dateRegex.test(appointmentDate)) {
+                        record.addError("appointmentDate", "Appointment Date must be formatted as m/d/yyyy");
+                    }
+                    // Appointment Date can only be input if Resolution is Approved
+                    if (resolution !== "Approved") {
+                        record.addError("appointmentDate", "Appointment Date can only be input if Resolution is Approved");
+                    }
+                }
+                if (reappointmentDate) {
+                    if (!dateRegex.test(reappointmentDate)) {
+                        record.addError("reappointmentDate", "Reappointment Date must be formatted as m/d/yyyy");
+                    }
+                    // Reappointment Date can only be input if Resolution is Approved
+                    if (resolution !== "Approved") {
+                        record.addError("reappointmentDate", "Reappointment Date can only be input if Resolution is Approved");
+                    }
+                    // Reappointment Date can only be input if Workflow Type is Appointment
+                    if (workflowType !== "Appointment") {
+                        record.addError("reappointmentDate", "Reappointment Date can only be input if Workflow Type is Appointment");
+                    }
+                }
+                if (reappointmentNotificationDate) {
+                    if (!dateRegex.test(reappointmentNotificationDate)) {
+                        record.addError("reappointmentNotificationDate", "Notification Date must be formatted as m/d/yyyy");
+                    }
+                }
+                if (inactiveDate) {
+                    if (!dateRegex.test(inactiveDate)) {
+                        record.addError("inactiveDate", "Inactive Date must be formatted as m/d/yyyy");
+                    }
+                    // Inactive Date can only be input if Workflow Type is "Provider - Location Termination"
+                    if (workflowType !== "Provider - Location Termination") {
+                        record.addError("inactiveDate", "Inactive Date can only be input if Workflow Type is \"Provider - Location Termination\"");
+                    }
+                }
+                // Date relationship validations
+                if (appointmentDate && reappointmentDate) {
+                    const appointmentDateObj = new Date(appointmentDate);
+                    const reappointmentDateObj = new Date(reappointmentDate);
+                    if (reappointmentDateObj <= appointmentDateObj) {
+                        record.addError("reappointmentDate", "Reappointment Date must be after Appointment Date");
+                    }
+                }
+                if (reappointmentNotificationDate && reappointmentDate) {
+                    const notificationDateObj = new Date(reappointmentNotificationDate);
+                    const reappointmentDateObj = new Date(reappointmentDate);
+                    if (notificationDateObj >= reappointmentDateObj) {
+                        record.addError("reappointmentNotificationDate", "Notification Date must be before Reappointment Date");
+                    }
+                    // Check if notification date is 1-999 days before reappointment date
+                    const timeDiff = reappointmentDateObj.getTime() - notificationDateObj.getTime();
+                    const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+                    if (daysDiff < 1 || daysDiff > 999) {
+                        record.addError("reappointmentNotificationDate", "Notification Date must be between 1 and 999 days before Reappointment Date");
+                    }
+                }
+                // Required fields when Resolution = Approved
+                if (resolution === "Approved") {
+                    if (!appointmentDate?.trim()) {
+                        record.addError("appointmentDate", "Appointment Date required when Resolution is Approved");
+                    }
+                    if (!reappointmentDate?.trim()) {
+                        record.addError("reappointmentDate", "Reappointment Date required when Resolution is Approved");
+                    }
+                }
+                // Required Inactive Date when Workflow Type = "Provider - Location Termination"
+                if (workflowType === "Provider - Location Termination") {
+                    if (!inactiveDate?.trim()) {
+                        record.addError("inactiveDate", "Inactive Date required when Workflow Type is \"Provider - Location Termination\"");
+                    }
+                }
+                // Notes validation
+                if (resolution === "Denied") {
+                    if (!notes?.trim()) {
+                        record.addError("notes", "Notes required when Resolution is Denied");
+                    }
+                }
+                if (notes && notes.length > 500) {
+                    record.addError("notes", "Notes must be 500 characters or less");
+                }
+                // Location Employment Type warning
+                if (locationEmploymentType && workflowType !== "Appointment") {
+                    record.addWarning("locationEmploymentType", "Location Employment Type will not import information when Workflow Type is not Appointment");
+                }
+                return record;
+            });
+            await event.data(validatedRecords);
+        }
+        catch (error) {
+            console.error("Error in Provider Appointment Dates validation:", error);
+            throw error;
+        }
+    });
+};
+exports.validateProviderAppointmentDatesAction = validateProviderAppointmentDatesAction;
+
+
+/***/ }),
+
+/***/ 55587:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.validateProviderLocationDetailsAction = void 0;
+const validateProviderLocationDetailsAction = (listener) => {
+    listener.on("job:ready", { job: "sheet:validateProviderLocationDetails" }, async ({ context: { jobId, sheetId }, ...event }) => {
+        try {
+            const { data: records } = await event.data;
+            // Track duplicates by External ID + External ID Type combination
+            const duplicateTracker = new Map();
+            records.forEach((record) => {
+                const externalId = record.get("externalId");
+                const externalIdType = record.get("externalIdType");
+                if (externalId && externalIdType) {
+                    const key = `${externalIdType}:${externalId}`;
+                    if (!duplicateTracker.has(key)) {
+                        duplicateTracker.set(key, []);
+                    }
+                    duplicateTracker.get(key).push(record);
+                }
+            });
+            // Process duplicate detection
+            duplicateTracker.forEach((duplicateRecords, key) => {
+                if (duplicateRecords.length > 1) {
+                    duplicateRecords.forEach((record) => {
+                        record.addError("externalId", `Duplicate records exist in file with same External ID Type and External ID combination`);
+                    });
+                }
+            });
+            const validatedRecords = records.map((record) => {
+                // Get field values for business rule validation
+                const externalId = record.get("externalId");
+                const externalIdType = record.get("externalIdType");
+                const locationKey = record.get("locationKey");
+                const credentialingOverride = record.get("credentialingOverride");
+                const endDate = record.get("endDate");
+                const pendingDate = record.get("pendingDate");
+                const taxonomy = record.get("taxonomy");
+                const contractedHours = record.get("contractedHours");
+                const minAgeSeen = record.get("minAgeSeen");
+                const maxAgeSeen = record.get("maxAgeSeen");
+                const membershipCapacity = record.get("membershipCapacity");
+                const seesPatients = record.get("seesPatients");
+                const providerLocationArchived = record.get("providerLocationArchived");
+                const acceptingNewPatients = record.get("acceptingNewPatients");
+                const pcpOrSpecialist = record.get("pcpOrSpecialist");
+                const payerDirectory = record.get("payerDirectory");
+                const virtualCare = record.get("virtualCare");
+                const telephonicCare = record.get("telephonicCare");
+                const remoteMonitoring = record.get("remoteMonitoring");
+                // Additional batch-level validations
+                // Note: Most validations are handled in the record hook, but some require full dataset context
+                // Business rule: Validate that External ID + External ID Type combination is unique
+                // (Already handled above in duplicate detection)
+                // Business rule: Location Key GUID validation with enhanced checking
+                if (locationKey?.trim()) {
+                    const guidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+                    if (!guidRegex.test(locationKey)) {
+                        record.addError("locationKey", "Location Key must be a valid GUID format (XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)");
+                    }
+                }
+                // Business rule: Enhanced conditional validations for Credentialing Override
+                if (credentialingOverride === "End Date" && !endDate?.trim()) {
+                    record.addError("endDate", "End Date is required when Credentialing Override is 'End Date'");
+                }
+                if (credentialingOverride === "Pending" && !pendingDate?.trim()) {
+                    record.addError("pendingDate", "Pending Date is required when Credentialing Override is 'Pending'");
+                }
+                // Business rule: Character limit validations
+                if (taxonomy && taxonomy.length > 100) {
+                    record.addError("taxonomy", "Taxonomy exceeds character limit of 100");
+                }
+                if (contractedHours && contractedHours.length > 10) {
+                    record.addError("contractedHours", "Contracted Hours exceeds character limit of 10");
+                }
+                if (minAgeSeen && minAgeSeen.length > 120) {
+                    record.addError("minAgeSeen", "Min Age Seen exceeds character limit of 120");
+                }
+                if (maxAgeSeen && maxAgeSeen.length > 120) {
+                    record.addError("maxAgeSeen", "Max Age Seen exceeds character limit of 120");
+                }
+                if (membershipCapacity && membershipCapacity.length > 4) {
+                    record.addError("membershipCapacity", "Membership Capacity exceeds character limit of 9999");
+                }
+                // Business rule: Y/N validations
+                const validateYesNo = (value, fieldName, fieldLabel) => {
+                    if (value?.trim() && !["Y", "N"].includes(value)) {
+                        record.addError(fieldName, `${fieldLabel} must be Y or N`);
+                    }
+                };
+                validateYesNo(seesPatients, "seesPatients", "Sees Patients?");
+                validateYesNo(providerLocationArchived, "providerLocationArchived", "Provider Location Archived?");
+                validateYesNo(acceptingNewPatients, "acceptingNewPatients", "Accepting New Patients");
+                validateYesNo(payerDirectory, "payerDirectory", "Payer Directory");
+                validateYesNo(virtualCare, "virtualCare", "Virtual Care");
+                validateYesNo(telephonicCare, "telephonicCare", "Telephonic Care");
+                validateYesNo(remoteMonitoring, "remoteMonitoring", "Remote Monitoring");
+                // Business rule: PCP or Specialist validation
+                if (pcpOrSpecialist?.trim() && !["", "PCP", "Specialist"].includes(pcpOrSpecialist)) {
+                    record.addError("pcpOrSpecialist", "PCP/Specialist must be 'Blank', 'PCP' or 'Specialist'");
+                }
+                // Validate User Defined Fields (X1-X10) character limits
+                for (let i = 1; i <= 10; i++) {
+                    const fieldName = `x${i}`;
+                    const fieldValue = record.get(fieldName);
+                    if (fieldValue && fieldValue.length > 50) {
+                        record.addError(fieldName, `${fieldName.toUpperCase()} exceeds character limit of 50`);
+                    }
+                }
+                return record;
+            });
+            return validatedRecords;
+        }
+        catch (error) {
+            console.error("Error in Provider Location Details validation:", error);
+            throw error;
+        }
+    });
+};
+exports.validateProviderLocationDetailsAction = validateProviderLocationDetailsAction;
+
+
+/***/ }),
+
+/***/ 97818:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.validateProviderPayerEnrollmentDatesAction = void 0;
+const validateProviderPayerEnrollmentDatesAction = (listener) => {
+    listener.on("job:ready", { job: "sheet:validateProviderPayerEnrollmentDates" }, async ({ context: { jobId, sheetId }, ...event }) => {
+        try {
+            const { data: records } = await event.data;
+            // Track duplicates by External ID + External ID Type combination
+            const duplicateTracker = new Map();
+            // Track Payer Provider ID consistency within Provider + Location + Payer combinations
+            const payerProviderIdTracker = new Map();
+            records.forEach((record) => {
+                const externalId = record.get("externalId");
+                const externalIdType = record.get("externalIdType");
+                const locationKey = record.get("locationKey");
+                const payerKey = record.get("payerKey");
+                const payerProviderId = record.get("payerProviderId");
+                // Duplicate detection by External ID + External ID Type
+                if (externalId && externalIdType) {
+                    const duplicateKey = `${externalIdType}:${externalId}`;
+                    if (!duplicateTracker.has(duplicateKey)) {
+                        duplicateTracker.set(duplicateKey, []);
+                    }
+                    duplicateTracker.get(duplicateKey).push(record);
+                }
+                // Track Payer Provider ID consistency for same Provider + Location + Payer
+                if (externalId && externalIdType && locationKey && payerKey) {
+                    const consistencyKey = `${externalIdType}:${externalId}:${locationKey}:${payerKey}`;
+                    if (!payerProviderIdTracker.has(consistencyKey)) {
+                        payerProviderIdTracker.set(consistencyKey, { records: [], payerProviderIds: new Set() });
+                    }
+                    const tracker = payerProviderIdTracker.get(consistencyKey);
+                    tracker.records.push(record);
+                    if (payerProviderId?.trim()) {
+                        tracker.payerProviderIds.add(payerProviderId);
+                    }
+                }
+            });
+            // Process duplicate detection
+            duplicateTracker.forEach((duplicateRecords, key) => {
+                if (duplicateRecords.length > 1) {
+                    duplicateRecords.forEach((record) => {
+                        record.addError("externalId", `Duplicate records exist in file with same External ID Type and External ID combination`);
+                    });
+                }
+            });
+            // Process Payer Provider ID consistency warnings
+            payerProviderIdTracker.forEach((tracker, key) => {
+                if (tracker.payerProviderIds.size > 1) {
+                    // Multiple different Payer Provider IDs for same Provider + Location + Payer
+                    tracker.records.forEach((record) => {
+                        record.addWarning("payerProviderId", "Payer Provider ID is not the same for all import records with same Provider, Location, and Payer");
+                    });
+                }
+            });
+            const validatedRecords = records.map((record) => {
+                // Get field values for business rule validation
+                const externalId = record.get("externalId");
+                const externalIdType = record.get("externalIdType");
+                const locationKey = record.get("locationKey");
+                const payerKey = record.get("payerKey");
+                const workflowKey = record.get("workflowKey");
+                const resolution = record.get("resolution");
+                const effectiveDate = record.get("effectiveDate");
+                const reEnrollmentDate = record.get("reEnrollmentDate");
+                const payerProviderId = record.get("payerProviderId");
+                // Additional batch-level validations
+                // Note: Most validations are handled in the record hook, but some require full dataset context
+                // Business rule: GUID validations with enhanced checking
+                const validateGUID = (guidValue, fieldName, fieldLabel) => {
+                    if (guidValue?.trim()) {
+                        const guidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+                        if (!guidRegex.test(guidValue)) {
+                            record.addError(fieldName, `${fieldLabel} must be a valid GUID format (XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)`);
+                        }
+                    }
+                };
+                validateGUID(locationKey, "locationKey", "Location Key");
+                validateGUID(payerKey, "payerKey", "Payer Key");
+                validateGUID(workflowKey, "workflowKey", "Workflow Key");
+                // Business rule: Resolution validation
+                if (resolution?.trim()) {
+                    const validResolutions = ["Approved", "Participating", "Rejected", "Denied", "Withdrawn", "Non-Participating", "Non-Billing", "Terminated"];
+                    if (!validResolutions.includes(resolution)) {
+                        record.addError("resolution", "Resolution must be Approved, Participating, Rejected, Denied, Withdrawn, Non-Participating, Non-Billing, or Terminated");
+                    }
+                }
+                // Business rule: Date format validation
+                const validateDate = (dateValue, fieldName, fieldLabel) => {
+                    if (dateValue?.trim()) {
+                        const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+                        if (!dateRegex.test(dateValue)) {
+                            record.addError(fieldName, `${fieldLabel} must be formatted as m/d/yyyy`);
+                            return null;
+                        }
+                        else {
+                            const [month, day, year] = dateValue.split('/').map(Number);
+                            const date = new Date(year, month - 1, day);
+                            if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+                                record.addError(fieldName, `${fieldLabel} must be a valid date`);
+                                return null;
+                            }
+                            return date;
+                        }
+                    }
+                    return null;
+                };
+                const effectiveDateObj = validateDate(effectiveDate, "effectiveDate", "Effective Date");
+                const reEnrollmentDateObj = validateDate(reEnrollmentDate, "reEnrollmentDate", "Re-Enrollment Date");
+                // Business rule: Resolution-dependent date validations
+                if (resolution?.trim()) {
+                    const approvedParticipatingResolutions = ["Approved", "Participating"];
+                    if (effectiveDate?.trim() && !approvedParticipatingResolutions.includes(resolution)) {
+                        record.addError("effectiveDate", "Effective Date can only be input if Resolution is Approved or Participating");
+                    }
+                    if (reEnrollmentDate?.trim() && !approvedParticipatingResolutions.includes(resolution)) {
+                        record.addError("reEnrollmentDate", "Re-enrollment Date can only be input if Resolution is Approved or Participating");
+                    }
+                }
+                // Business rule: Re-Enrollment Date must be after Effective Date
+                if (effectiveDateObj && reEnrollmentDateObj) {
+                    if (reEnrollmentDateObj <= effectiveDateObj) {
+                        record.addError("reEnrollmentDate", "Re-enrollment Date must be after Effective Date");
+                    }
+                }
+                // Business rule: Payer Provider ID character limit
+                if (payerProviderId && payerProviderId.length > 50) {
+                    record.addError("payerProviderId", "Payer Provider ID exceeds character limit of 50");
+                }
+                // Business rule: External ID Type validation
+                if (externalIdType?.trim() && !["NPI", "InternalID", "ProviderID", "EmrID", "BillingSystemID"].includes(externalIdType)) {
+                    record.addError("externalIdType", "External ID Type must be NPI, InternalID, ProviderID, EmrID, or BillingSystemID");
+                }
+                // Business rule: External ID and External ID Type dependency
+                if ((externalId?.trim() && !externalIdType?.trim()) || (!externalId?.trim() && externalIdType?.trim())) {
+                    record.addError("externalId", "Must provide both External ID and External ID Type");
+                    record.addError("externalIdType", "Must provide both External ID and External ID Type");
+                }
+                return record;
+            });
+            return validatedRecords;
+        }
+        catch (error) {
+            console.error("Error in Provider Payer Enrollment Dates validation:", error);
+            throw error;
+        }
+    });
+};
+exports.validateProviderPayerEnrollmentDatesAction = validateProviderPayerEnrollmentDatesAction;
 
 
 /***/ }),
@@ -165685,6 +167195,509 @@ exports.boardCertificationSheet = {
         }
         // Note: User Defined Fields would be added dynamically based on company configuration
         // They should be added before the board_certification_preference field as noted in spec
+    ]
+};
+
+
+/***/ }),
+
+/***/ 70915:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.cdsCertificateSheet = void 0;
+exports.cdsCertificateSheet = {
+    name: "CDS Certificate",
+    slug: "cds-certificate",
+    access: ["*"],
+    fields: [
+        // Key Fields for Updates
+        {
+            key: "provider_name",
+            type: "string",
+            label: "Provider Name",
+            description: "(Dummy Field)"
+        },
+        {
+            key: "external_id",
+            type: "string",
+            label: "External ID",
+            description: "Key field for updating, Required field",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "external_id_type",
+            type: "string",
+            label: "External ID Type",
+            description: "Key field for updating, Required field",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "auto_verify",
+            type: "enum",
+            label: "Auto-Verify?",
+            description: "Required field - must be Y or N",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ],
+            config: {
+                options: [
+                    { value: "Y", label: "Y" },
+                    { value: "N", label: "N" }
+                ]
+            }
+        },
+        // License Information
+        {
+            key: "license_number",
+            type: "string",
+            label: "License Number",
+            description: "Key field for updating, Required field",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "state",
+            type: "string",
+            label: "State",
+            description: "Key field for updating, Required field - state abbreviation",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "schedule",
+            type: "string",
+            label: "Schedule",
+            description: "Use '|' character to separate multiple values (e.g., '3|3N|5')"
+        },
+        {
+            key: "status",
+            type: "string",
+            label: "Status",
+            description: "Status from dropdown options"
+        },
+        {
+            key: "discipline_on_file",
+            type: "enum",
+            label: "Discipline on File?",
+            description: "Must be Y or N",
+            config: {
+                options: [
+                    { value: "Y", label: "Y" },
+                    { value: "N", label: "N" }
+                ]
+            }
+        },
+        // Date Fields
+        {
+            key: "issue_date",
+            type: "date",
+            label: "Issue Date",
+            description: "Key field for updating - format: m/d/yyyy"
+        },
+        {
+            key: "expiration_date",
+            type: "date",
+            label: "Expiration Date",
+            description: "Key field for updating, Required field - format: m/d/yyyy",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        // Boolean/Flag Fields
+        {
+            key: "monitor_expiration_date",
+            type: "enum",
+            label: "Monitor Expiration Date",
+            description: "Must be T or F (or blank)",
+            config: {
+                options: [
+                    { value: "T", label: "T" },
+                    { value: "F", label: "F" }
+                ]
+            }
+        },
+        {
+            key: "record_viewable_by_provider",
+            type: "enum",
+            label: "Record Viewable by Provider",
+            description: "Must be T or F (or blank)",
+            config: {
+                options: [
+                    { value: "T", label: "T" },
+                    { value: "F", label: "F" }
+                ]
+            }
+        },
+        {
+            key: "file_viewable_by_provider",
+            type: "enum",
+            label: "File Viewable by Provider",
+            description: "Must be T or F (or blank)",
+            config: {
+                options: [
+                    { value: "T", label: "T" },
+                    { value: "F", label: "F" }
+                ]
+            }
+        },
+        {
+            key: "ignore_required_fields_validation",
+            type: "enum",
+            label: "Ignore Required Fields Validation?",
+            description: "Must be Y or N (or blank)",
+            config: {
+                options: [
+                    { value: "Y", label: "Y" },
+                    { value: "N", label: "N" }
+                ]
+            }
+        },
+        // File Management
+        {
+            key: "file_key",
+            type: "string",
+            label: "File Key",
+            description: "GUID format: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+        },
+        // Administrative Fields
+        {
+            key: "note",
+            type: "string",
+            label: "Note",
+            description: "Notes field (max 10,000 characters)"
+        },
+        {
+            key: "user",
+            type: "string",
+            label: "User",
+            description: "User field - if empty, 'Credentialing System' will be used"
+        },
+        {
+            key: "timestamp",
+            type: "date",
+            label: "TimeStamp",
+            description: "Timestamp in m/d/yyyy format"
+        },
+        // Standard X1-X10 Custom Fields
+        {
+            key: "x1",
+            type: "string",
+            label: "X1",
+            description: "Custom field X1"
+        },
+        {
+            key: "x2",
+            type: "string",
+            label: "X2",
+            description: "Custom field X2"
+        },
+        {
+            key: "x3",
+            type: "string",
+            label: "X3",
+            description: "Custom field X3"
+        },
+        {
+            key: "x4",
+            type: "string",
+            label: "X4",
+            description: "Custom field X4"
+        },
+        {
+            key: "x5",
+            type: "string",
+            label: "X5",
+            description: "Custom field X5"
+        },
+        {
+            key: "x6",
+            type: "string",
+            label: "X6",
+            description: "Custom field X6"
+        },
+        {
+            key: "x7",
+            type: "string",
+            label: "X7",
+            description: "Custom field X7"
+        },
+        {
+            key: "x8",
+            type: "string",
+            label: "X8",
+            description: "Custom field X8"
+        },
+        {
+            key: "x9",
+            type: "string",
+            label: "X9",
+            description: "Custom field X9"
+        },
+        {
+            key: "x10",
+            type: "string",
+            label: "X10",
+            description: "Custom field X10"
+        }
+    ],
+    actions: [
+        {
+            operation: "validateCDSCertificate",
+            mode: "foreground",
+            label: "Validate CDS Certificate",
+            description: "Validate CDS certificate data with comprehensive business rules, date validation, and GUID format validation"
+        }
+    ]
+};
+
+
+/***/ }),
+
+/***/ 70078:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.cmeSheet = void 0;
+exports.cmeSheet = {
+    name: "CME Import Format",
+    slug: "cme",
+    access: ["*"],
+    fields: [
+        {
+            key: "providerName",
+            type: "string",
+            label: "Provider Name",
+            description: "Dummy field for provider identification",
+        },
+        {
+            key: "externalId",
+            type: "string",
+            label: "External ID",
+            description: "Key field for updating, required field",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "externalIdType",
+            type: "string",
+            label: "External ID Type",
+            description: "Key field for updating, required field",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "name",
+            type: "string",
+            label: "Name",
+            description: "Key field for updating, required field (max 100 characters)",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "category",
+            type: "string",
+            label: "Category",
+            description: "Key field for updating, must match dropdown values"
+        },
+        {
+            key: "cmeContents",
+            type: "string",
+            label: "CME Contents",
+            description: "Key field for updating (max 100 characters)"
+        },
+        {
+            key: "credits",
+            type: "string",
+            label: "Credits",
+            description: "Numeric value (max 6 characters)"
+        },
+        {
+            key: "cmeDescription",
+            type: "string",
+            label: "CME Description",
+            description: "Description of CME (max 500 characters)"
+        },
+        {
+            key: "completedOn",
+            type: "date",
+            label: "Completed On",
+            description: "Key field for updating, format: m/d/yyyy"
+        },
+        {
+            key: "validUntil",
+            type: "date",
+            label: "Valid Until",
+            description: "Expiration date, format: m/d/yyyy"
+        },
+        {
+            key: "states",
+            type: "string",
+            label: "State(s)",
+            description: "Values should be pipe-delimited (|)"
+        },
+        {
+            key: "recordViewableByProvider",
+            type: "enum",
+            label: "Record Viewable by Provider",
+            description: "Must be T or F if not empty",
+            config: {
+                options: [
+                    { value: "", label: "" },
+                    { value: "T", label: "T" },
+                    { value: "F", label: "F" }
+                ]
+            }
+        },
+        {
+            key: "frequency",
+            type: "string",
+            label: "Frequency",
+            description: "Must match dropdown values"
+        },
+        {
+            key: "hoursRequired",
+            type: "number",
+            label: "Hours Required",
+            description: "Numeric value between 1-50, inclusive"
+        },
+        {
+            key: "fileViewableByProvider",
+            type: "enum",
+            label: "File Viewable by Provider",
+            description: "Must be T or F if not empty",
+            config: {
+                options: [
+                    { value: "", label: "" },
+                    { value: "T", label: "T" },
+                    { value: "F", label: "F" }
+                ]
+            }
+        },
+        {
+            key: "fileKey",
+            type: "string",
+            label: "File Key",
+            description: "GUID format: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX (adding in 2024.15+)"
+        },
+        {
+            key: "note",
+            type: "string",
+            label: "Note",
+            description: "Notes field (max 10,000 characters)"
+        },
+        {
+            key: "user",
+            type: "string",
+            label: "User",
+            description: "User identifier, defaults to 'Credentialing System' if empty"
+        },
+        {
+            key: "timestamp",
+            type: "string",
+            label: "TimeStamp",
+            description: "Format: m/d/yyyy h:mm:ss"
+        },
+        // X1-X10 Custom Fields (Standard requirement)
+        {
+            key: "x1",
+            type: "string",
+            label: "X1",
+            description: "Custom field X1"
+        },
+        {
+            key: "x2",
+            type: "string",
+            label: "X2",
+            description: "Custom field X2"
+        },
+        {
+            key: "x3",
+            type: "string",
+            label: "X3",
+            description: "Custom field X3"
+        },
+        {
+            key: "x4",
+            type: "string",
+            label: "X4",
+            description: "Custom field X4"
+        },
+        {
+            key: "x5",
+            type: "string",
+            label: "X5",
+            description: "Custom field X5"
+        },
+        {
+            key: "x6",
+            type: "string",
+            label: "X6",
+            description: "Custom field X6"
+        },
+        {
+            key: "x7",
+            type: "string",
+            label: "X7",
+            description: "Custom field X7"
+        },
+        {
+            key: "x8",
+            type: "string",
+            label: "X8",
+            description: "Custom field X8"
+        },
+        {
+            key: "x9",
+            type: "string",
+            label: "X9",
+            description: "Custom field X9"
+        },
+        {
+            key: "x10",
+            type: "string",
+            label: "X10",
+            description: "Custom field X10"
+        }
+    ],
+    actions: [
+        {
+            operation: "validateCME",
+            mode: "foreground",
+            label: "Validate CME",
+            description: "Validate CME data with comprehensive business rules"
+        }
     ]
 };
 
@@ -167574,6 +169587,993 @@ exports.educationGapSheet = {
 
 /***/ }),
 
+/***/ 76933:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.educationSheet = void 0;
+exports.educationSheet = {
+    name: "Education Import Format",
+    slug: "education",
+    access: ["*"],
+    fields: [
+        {
+            key: "providerName",
+            type: "string",
+            label: "Provider Name",
+            description: "Dummy field for provider identification",
+        },
+        {
+            key: "externalId",
+            type: "string",
+            label: "External ID",
+            description: "Key field for updating, required field",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "externalIdType",
+            type: "string",
+            label: "External ID Type",
+            description: "Key field for updating, required field",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "educationType",
+            type: "enum",
+            label: "Education Type",
+            description: "Required field, must match dropdown values",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ],
+            config: {
+                options: [
+                    { value: "Bachelor's", label: "Bachelor's" },
+                    { value: "Master's", label: "Master's" },
+                    { value: "Doctorate", label: "Doctorate" },
+                    { value: "Medical School", label: "Medical School" },
+                    { value: "Professional School", label: "Professional School" },
+                    { value: "Fifth Pathway", label: "Fifth Pathway" }
+                ]
+            }
+        },
+        {
+            key: "foreignGraduate",
+            type: "enum",
+            label: "Foreign Graduate?",
+            description: "Must be T or F if not empty",
+            config: {
+                options: [
+                    { value: "", label: "" },
+                    { value: "T", label: "T" },
+                    { value: "F", label: "F" }
+                ]
+            }
+        },
+        {
+            key: "ecfmgNumber",
+            type: "string",
+            label: "ECFMG Number",
+            description: "ECFMG identification number (max 8 characters)"
+        },
+        {
+            key: "ecfmgIssueDate",
+            type: "date",
+            label: "ECFMG Issue Date",
+            description: "Format: m/d/yyyy"
+        },
+        {
+            key: "fifthPathwayNumber",
+            type: "string",
+            label: "Fifth Pathway Number",
+            description: "Fifth pathway identification number (max 50 characters)"
+        },
+        {
+            key: "fifthPathwayIssueDate",
+            type: "date",
+            label: "Fifth Pathway Issue Date",
+            description: "Format: m/d/yyyy"
+        },
+        {
+            key: "degree",
+            type: "string",
+            label: "Degree",
+            description: "Key field for updating, required field - must match dropdown based on Education Type",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "areaOfStudy",
+            type: "string",
+            label: "Area of Study / Major",
+            description: "Key field for updating (max 100 characters)"
+        },
+        {
+            key: "schoolName",
+            type: "string",
+            label: "School Name",
+            description: "Key field for updating (max 150 characters)"
+        },
+        {
+            key: "institutionEmail",
+            type: "string",
+            label: "Institution Email",
+            description: "Email address format (max 100 characters)"
+        },
+        {
+            key: "addressLine1",
+            type: "string",
+            label: "Address Line 1",
+            description: "Primary address (max 100 characters)"
+        },
+        {
+            key: "addressLine2",
+            type: "string",
+            label: "Address Line 2",
+            description: "Secondary address (max 50 characters)"
+        },
+        {
+            key: "city",
+            type: "string",
+            label: "City",
+            description: "City name (max 50 characters)"
+        },
+        {
+            key: "state",
+            type: "string",
+            label: "State",
+            description: "State/subdivision (max 50 characters)"
+        },
+        {
+            key: "zip",
+            type: "string",
+            label: "Zip",
+            description: "Zip/postal code (max 10 alphanumeric characters)"
+        },
+        {
+            key: "country",
+            type: "string",
+            label: "Country",
+            description: "Country name (max 100 characters)"
+        },
+        {
+            key: "phone",
+            type: "string",
+            label: "Phone",
+            description: "Phone number (9, 10, or 12 digits only)"
+        },
+        {
+            key: "ext",
+            type: "string",
+            label: "Ext.",
+            description: "Phone extension (max 20 digits)"
+        },
+        {
+            key: "fax",
+            type: "string",
+            label: "Fax",
+            description: "Fax number (9, 10, or 12 digits only)"
+        },
+        {
+            key: "startDate",
+            type: "date",
+            label: "Start Date",
+            description: "Key field for updating, format: m/d/yyyy"
+        },
+        {
+            key: "endDate",
+            type: "date",
+            label: "End Date",
+            description: "Key field for updating, format: m/d/yyyy"
+        },
+        {
+            key: "didYouGraduate",
+            type: "enum",
+            label: "Did you graduate?",
+            description: "Must be Y or N if not empty",
+            config: {
+                options: [
+                    { value: "", label: "" },
+                    { value: "Y", label: "Y" },
+                    { value: "N", label: "N" }
+                ]
+            }
+        },
+        {
+            key: "viewableByProvider",
+            type: "enum",
+            label: "Viewable by Provider",
+            description: "Must be T or F if not empty",
+            config: {
+                options: [
+                    { value: "", label: "" },
+                    { value: "T", label: "T" },
+                    { value: "F", label: "F" }
+                ]
+            }
+        },
+        {
+            key: "website",
+            type: "string",
+            label: "Website",
+            description: "Website URL (max 500 characters)"
+        },
+        {
+            key: "fileViewableByProvider",
+            type: "enum",
+            label: "File Viewable by Provider",
+            description: "Must be T or F if not empty",
+            config: {
+                options: [
+                    { value: "", label: "" },
+                    { value: "T", label: "T" },
+                    { value: "F", label: "F" }
+                ]
+            }
+        },
+        {
+            key: "ignoreRequiredFieldsValidation",
+            type: "enum",
+            label: "Ignore Required Fields Validation",
+            description: "Must be Y or N if not empty",
+            config: {
+                options: [
+                    { value: "", label: "" },
+                    { value: "Y", label: "Y" },
+                    { value: "N", label: "N" }
+                ]
+            }
+        },
+        {
+            key: "fileKey",
+            type: "string",
+            label: "File Key",
+            description: "GUID format: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+        },
+        {
+            key: "note",
+            type: "string",
+            label: "Note",
+            description: "Notes field (max 10,000 characters)"
+        },
+        {
+            key: "user",
+            type: "string",
+            label: "User",
+            description: "User identifier, defaults to 'Credentialing System' if empty"
+        },
+        {
+            key: "timestamp",
+            type: "string",
+            label: "TimeStamp",
+            description: "Format: m/d/yyyy h:mm:ss"
+        },
+        // X1-X10 Custom Fields (Standard requirement)
+        {
+            key: "x1",
+            type: "string",
+            label: "X1",
+            description: "Custom field X1"
+        },
+        {
+            key: "x2",
+            type: "string",
+            label: "X2",
+            description: "Custom field X2"
+        },
+        {
+            key: "x3",
+            type: "string",
+            label: "X3",
+            description: "Custom field X3"
+        },
+        {
+            key: "x4",
+            type: "string",
+            label: "X4",
+            description: "Custom field X4"
+        },
+        {
+            key: "x5",
+            type: "string",
+            label: "X5",
+            description: "Custom field X5"
+        },
+        {
+            key: "x6",
+            type: "string",
+            label: "X6",
+            description: "Custom field X6"
+        },
+        {
+            key: "x7",
+            type: "string",
+            label: "X7",
+            description: "Custom field X7"
+        },
+        {
+            key: "x8",
+            type: "string",
+            label: "X8",
+            description: "Custom field X8"
+        },
+        {
+            key: "x9",
+            type: "string",
+            label: "X9",
+            description: "Custom field X9"
+        },
+        {
+            key: "x10",
+            type: "string",
+            label: "X10",
+            description: "Custom field X10"
+        }
+    ],
+    actions: [
+        {
+            operation: "validateEducation",
+            mode: "foreground",
+            label: "Validate Education",
+            description: "Validate education data with comprehensive business rules"
+        }
+    ]
+};
+
+
+/***/ }),
+
+/***/ 73186:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.locationSheet = exports.yesNoEnum = exports.locationCategoryEnum = exports.externalIdTypeEnum = void 0;
+// External ID Type enumeration for Location Import Format
+exports.externalIdTypeEnum = [
+    { value: "Location Key", label: "Location Key" },
+    { value: "Location ID", label: "Location ID" }
+];
+// Location Category enumeration
+exports.locationCategoryEnum = [
+    { value: "", label: "" },
+    { value: "Appointment", label: "Appointment" },
+    { value: "Practice", label: "Practice" }
+];
+// Y/N boolean enumeration for various fields
+exports.yesNoEnum = [
+    { value: "", label: "" },
+    { value: "Y", label: "Y" },
+    { value: "N", label: "N" }
+];
+// Location Import Format sheet configuration with 95+ fields
+exports.locationSheet = {
+    name: "Location Import Format",
+    slug: "location",
+    fields: [
+        // Key Fields (2)
+        {
+            key: "externalId",
+            type: "string",
+            label: "External ID",
+            description: "Required key field for updating, optional when adding (max 36 characters)",
+            constraints: [{ type: "required" }]
+        },
+        {
+            key: "externalIdType",
+            type: "enum",
+            label: "External ID Type",
+            description: "Required key field for updating, optional when adding (Location Key or Location ID)",
+            config: { options: exports.externalIdTypeEnum },
+            constraints: [{ type: "required" }]
+        },
+        // Basic Information (8)
+        {
+            key: "locationName",
+            type: "string",
+            label: "Location Name",
+            description: "Required field (max 100 characters)",
+            constraints: [{ type: "required" }]
+        },
+        {
+            key: "dba",
+            type: "string",
+            label: "DBA",
+            description: "Max 100 characters"
+        },
+        {
+            key: "legalBusinessName",
+            type: "string",
+            label: "Legal Business Name",
+            description: "Max 100 characters"
+        },
+        {
+            key: "corporateEntity",
+            type: "string",
+            label: "Corporate Entity",
+            description: "Required field",
+            constraints: [{ type: "required" }]
+        },
+        {
+            key: "taxonomy",
+            type: "string",
+            label: "Taxonomy",
+            description: "Max 100 characters"
+        },
+        {
+            key: "specialty",
+            type: "string",
+            label: "Specialty",
+            description: "Max 50 characters"
+        },
+        {
+            key: "locationId",
+            type: "string",
+            label: "Location ID",
+            description: "Use | as delimiter character. When updating, ALL Location ID's in .csv must match with ALL Location ID's for existing Location. Each Location ID needs to be unique and can only be used in one Location. Max 64 characters per ID"
+        },
+        {
+            key: "region",
+            type: "string",
+            label: "Region",
+            description: "Max 50 characters"
+        },
+        // Configuration Fields (2)
+        {
+            key: "affiliationVerificationAvailable",
+            type: "enum",
+            label: "Affiliation Verification Available",
+            config: { options: exports.yesNoEnum }
+        },
+        {
+            key: "locationDetailIdsSameAsCorporateEntity",
+            type: "enum",
+            label: "Location Detail IDs Same as Corporate Entity",
+            description: "If Y, .csv import ignored for all fields in Location Detail ID's section and Corporate Entity values for these fields imported instead",
+            config: { options: exports.yesNoEnum }
+        },
+        // Location Detail IDs (4)
+        {
+            key: "npiNumber",
+            type: "string",
+            label: "NPI Number",
+            description: "Must be exactly 10 digits"
+        },
+        {
+            key: "taxId",
+            type: "string",
+            label: "Tax ID",
+            description: "Max 50 characters"
+        },
+        {
+            key: "medicareId",
+            type: "string",
+            label: "Medicare ID",
+            description: "Max 50 characters"
+        },
+        {
+            key: "medicaidId",
+            type: "string",
+            label: "Medicaid ID",
+            description: "Max 50 characters"
+        },
+        // Contact Information Section (13)
+        {
+            key: "contactInformationSameAsCorporateEntity",
+            type: "enum",
+            label: "Contact Information Same as Corporate Entity",
+            description: "If Y, .csv import ignored for all fields in Contact Information section and Corporate Entity values for these fields imported instead",
+            config: { options: exports.yesNoEnum }
+        },
+        {
+            key: "contactCountry",
+            type: "string",
+            label: "Contact Country",
+            description: "Max 100 characters"
+        },
+        {
+            key: "contactAddressLine1",
+            type: "string",
+            label: "Contact Address Line 1",
+            description: "Max 100 characters"
+        },
+        {
+            key: "contactAddressLine2",
+            type: "string",
+            label: "Contact Address Line 2",
+            description: "Max 50 characters"
+        },
+        {
+            key: "contactCity",
+            type: "string",
+            label: "Contact City",
+            description: "Max 50 characters"
+        },
+        {
+            key: "contactCounty",
+            type: "string",
+            label: "Contact County",
+            description: "Max 100 characters"
+        },
+        {
+            key: "contactStateProvince",
+            type: "string",
+            label: "Contact State/Province"
+        },
+        {
+            key: "contactZip",
+            type: "string",
+            label: "Contact Zip",
+            description: "Must be 5, 6, or 9 digits"
+        },
+        {
+            key: "contactEmail",
+            type: "string",
+            label: "Contact Email",
+            description: "Must adhere to username@domain.com format"
+        },
+        {
+            key: "contactPhoneNumber",
+            type: "string",
+            label: "Contact Phone Number",
+            description: "Must be 9, 10, or 12-digit number"
+        },
+        {
+            key: "contactExt",
+            type: "string",
+            label: "Contact Ext.",
+            description: "Must be a number up to 20 digits in length"
+        },
+        {
+            key: "contactFax",
+            type: "string",
+            label: "Contact Fax",
+            description: "Must be 9, 10, or 12-digit number"
+        },
+        {
+            key: "website",
+            type: "string",
+            label: "Website",
+            description: "Must adhere to https://www.subdomain.topdomain format"
+        },
+        // Correspondence Section (13)
+        {
+            key: "correspondenceSameAsCorporateEntity",
+            type: "enum",
+            label: "Correspondence Same as Corporate Entity",
+            description: "If Y, .csv import ignored for all fields in Correspondence section and Corporate Entity values for these fields imported instead",
+            config: { options: exports.yesNoEnum }
+        },
+        {
+            key: "correspondenceName",
+            type: "string",
+            label: "Correspondence Name",
+            description: "Max 100 characters"
+        },
+        {
+            key: "correspondenceTitle",
+            type: "string",
+            label: "Correspondence Title",
+            description: "Max 100 characters"
+        },
+        {
+            key: "correspondenceCountry",
+            type: "string",
+            label: "Correspondence Country"
+        },
+        {
+            key: "correspondenceAddressLine1",
+            type: "string",
+            label: "Correspondence Address Line 1",
+            description: "Max 100 characters"
+        },
+        {
+            key: "correspondenceAddressLine2",
+            type: "string",
+            label: "Correspondence Address Line 2",
+            description: "Max 50 characters"
+        },
+        {
+            key: "correspondenceCity",
+            type: "string",
+            label: "Correspondence City",
+            description: "Max 50 characters"
+        },
+        {
+            key: "correspondenceCounty",
+            type: "string",
+            label: "Correspondence County",
+            description: "Max 100 characters"
+        },
+        {
+            key: "correspondenceStateProvince",
+            type: "string",
+            label: "Correspondence State/Province"
+        },
+        {
+            key: "correspondenceZip",
+            type: "string",
+            label: "Correspondence Zip",
+            description: "Must be 5, 6, or 9 digits"
+        },
+        {
+            key: "correspondenceEmail",
+            type: "string",
+            label: "Correspondence Email",
+            description: "Must adhere to username@domain.com format"
+        },
+        {
+            key: "correspondencePhoneNumber",
+            type: "string",
+            label: "Correspondence Phone Number",
+            description: "Must be 9, 10, or 12-digit number"
+        },
+        {
+            key: "correspondenceExt",
+            type: "string",
+            label: "Correspondence Ext.",
+            description: "Must be a number up to 20 digits in length"
+        },
+        {
+            key: "correspondenceFax",
+            type: "string",
+            label: "Correspondence Fax",
+            description: "Must be 9, 10, or 12-digit number"
+        },
+        // Operating Hours - Sunday (3)
+        {
+            key: "sundayStartTime",
+            type: "string",
+            label: "Sunday Start Time",
+            description: "Must be formatted as hh:mm (military time)"
+        },
+        {
+            key: "sundayEndTime",
+            type: "string",
+            label: "Sunday End Time",
+            description: "Must be formatted as hh:mm (military time)"
+        },
+        {
+            key: "sundayClosed",
+            type: "enum",
+            label: "Sunday Closed",
+            description: "If Closed = Y, Start and End Times for that day ignored and not imported",
+            config: { options: exports.yesNoEnum }
+        },
+        // Operating Hours - Monday (3)
+        {
+            key: "mondayStartTime",
+            type: "string",
+            label: "Monday Start Time",
+            description: "Must be formatted as hh:mm (military time)"
+        },
+        {
+            key: "mondayEndTime",
+            type: "string",
+            label: "Monday End Time",
+            description: "Must be formatted as hh:mm (military time)"
+        },
+        {
+            key: "mondayClosed",
+            type: "enum",
+            label: "Monday Closed",
+            description: "If Closed = Y, Start and End Times for that day ignored and not imported",
+            config: { options: exports.yesNoEnum }
+        },
+        // Operating Hours - Tuesday (3)
+        {
+            key: "tuesdayStartTime",
+            type: "string",
+            label: "Tuesday Start Time",
+            description: "Must be formatted as hh:mm (military time)"
+        },
+        {
+            key: "tuesdayEndTime",
+            type: "string",
+            label: "Tuesday End Time",
+            description: "Must be formatted as hh:mm (military time)"
+        },
+        {
+            key: "tuesdayClosed",
+            type: "enum",
+            label: "Tuesday Closed",
+            description: "If Closed = Y, Start and End Times for that day ignored and not imported",
+            config: { options: exports.yesNoEnum }
+        },
+        // Operating Hours - Wednesday (3)
+        {
+            key: "wednesdayStartTime",
+            type: "string",
+            label: "Wednesday Start Time",
+            description: "Must be formatted as hh:mm (military time)"
+        },
+        {
+            key: "wednesdayEndTime",
+            type: "string",
+            label: "Wednesday End Time",
+            description: "Must be formatted as hh:mm (military time)"
+        },
+        {
+            key: "wednesdayClosed",
+            type: "enum",
+            label: "Wednesday Closed",
+            description: "If Closed = Y, Start and End Times for that day ignored and not imported",
+            config: { options: exports.yesNoEnum }
+        },
+        // Operating Hours - Thursday (3)
+        {
+            key: "thursdayStartTime",
+            type: "string",
+            label: "Thursday Start Time",
+            description: "Must be formatted as hh:mm (military time)"
+        },
+        {
+            key: "thursdayEndTime",
+            type: "string",
+            label: "Thursday End Time",
+            description: "Must be formatted as hh:mm (military time)"
+        },
+        {
+            key: "thursdayClosed",
+            type: "enum",
+            label: "Thursday Closed",
+            description: "If Closed = Y, Start and End Times for that day ignored and not imported",
+            config: { options: exports.yesNoEnum }
+        },
+        // Operating Hours - Friday (3)
+        {
+            key: "fridayStartTime",
+            type: "string",
+            label: "Friday Start Time",
+            description: "Must be formatted as hh:mm (military time)"
+        },
+        {
+            key: "fridayEndTime",
+            type: "string",
+            label: "Friday End Time",
+            description: "Must be formatted as hh:mm (military time)"
+        },
+        {
+            key: "fridayClosed",
+            type: "enum",
+            label: "Friday Closed",
+            description: "If Closed = Y, Start and End Times for that day ignored and not imported",
+            config: { options: exports.yesNoEnum }
+        },
+        // Operating Hours - Saturday (3)
+        {
+            key: "saturdayStartTime",
+            type: "string",
+            label: "Saturday Start Time",
+            description: "Must be formatted as hh:mm (military time)"
+        },
+        {
+            key: "saturdayEndTime",
+            type: "string",
+            label: "Saturday End Time",
+            description: "Must be formatted as hh:mm (military time)"
+        },
+        {
+            key: "saturdayClosed",
+            type: "enum",
+            label: "Saturday Closed",
+            description: "If Closed = Y, Start and End Times for that day ignored and not imported",
+            config: { options: exports.yesNoEnum }
+        },
+        // Billing Address Section (13)
+        {
+            key: "billingAddressSameAsCorporateEntity",
+            type: "enum",
+            label: "Billing Address Same as Corporate Entity",
+            description: "If Y, .csv import ignored for all fields in Billing Address section and Corporate Entity values for these fields imported instead",
+            config: { options: exports.yesNoEnum }
+        },
+        {
+            key: "billingName",
+            type: "string",
+            label: "Billing Name",
+            description: "Max 100 characters"
+        },
+        {
+            key: "billingCountry",
+            type: "string",
+            label: "Billing Country"
+        },
+        {
+            key: "billingAddressLine1",
+            type: "string",
+            label: "Billing Address Line 1",
+            description: "Max 100 characters"
+        },
+        {
+            key: "billingAddressLine2",
+            type: "string",
+            label: "Billing Address Line 2",
+            description: "Max 50 characters"
+        },
+        {
+            key: "billingCity",
+            type: "string",
+            label: "Billing City",
+            description: "Max 50 characters"
+        },
+        {
+            key: "billingCounty",
+            type: "string",
+            label: "Billing County",
+            description: "Max 100 characters"
+        },
+        {
+            key: "billingStateProvince",
+            type: "string",
+            label: "Billing State/Province"
+        },
+        {
+            key: "billingZip",
+            type: "string",
+            label: "Billing Zip",
+            description: "Must be 5, 6, or 9 digits"
+        },
+        {
+            key: "billingEmail",
+            type: "string",
+            label: "Billing Email",
+            description: "Must adhere to username@domain.com format"
+        },
+        {
+            key: "billingPhoneNumber",
+            type: "string",
+            label: "Billing Phone Number",
+            description: "Must be 9, 10, or 12-digit number"
+        },
+        {
+            key: "billingExt",
+            type: "string",
+            label: "Billing Ext.",
+            description: "Must be a number up to 20 digits in length"
+        },
+        {
+            key: "billingFax",
+            type: "string",
+            label: "Billing Fax",
+            description: "Must be 9, 10, or 12-digit number"
+        },
+        // Additional Fields (6)
+        {
+            key: "generalNotes",
+            type: "string",
+            label: "General Notes",
+            description: "Max 10,000 characters"
+        },
+        {
+            key: "instructions",
+            type: "string",
+            label: "Instructions",
+            description: "Max 10,000 characters"
+        },
+        {
+            key: "locationCategory",
+            type: "enum",
+            label: "Location Category",
+            description: "Value must be blank, Appointment, or Practice",
+            config: { options: exports.locationCategoryEnum }
+        },
+        {
+            key: "locationType",
+            type: "string",
+            label: "Location Type"
+        },
+        {
+            key: "excludeFromWorkforceConnection",
+            type: "enum",
+            label: "Exclude From Workforce Connection",
+            config: { options: exports.yesNoEnum }
+        },
+        {
+            key: "excludeFromHl7Integration",
+            type: "enum",
+            label: "Exclude from HL7 Integration",
+            config: { options: exports.yesNoEnum }
+        },
+        // Accessibility Features (9)
+        {
+            key: "adaCompliant",
+            type: "enum",
+            label: "ADA Compliant",
+            config: { options: exports.yesNoEnum }
+        },
+        {
+            key: "examTableScaleChair",
+            type: "enum",
+            label: "Exam Table/Scale/Chair",
+            config: { options: exports.yesNoEnum }
+        },
+        {
+            key: "exteriorBuilding",
+            type: "enum",
+            label: "Exterior Building",
+            config: { options: exports.yesNoEnum }
+        },
+        {
+            key: "handicapAccessibility",
+            type: "enum",
+            label: "Handicap Accessibility",
+            config: { options: exports.yesNoEnum }
+        },
+        {
+            key: "interiorBuilding",
+            type: "enum",
+            label: "Interior Building",
+            config: { options: exports.yesNoEnum }
+        },
+        {
+            key: "parking",
+            type: "enum",
+            label: "Parking",
+            config: { options: exports.yesNoEnum }
+        },
+        {
+            key: "publicTransportationAccess",
+            type: "enum",
+            label: "Public Transportation Access",
+            config: { options: exports.yesNoEnum }
+        },
+        {
+            key: "restroom",
+            type: "enum",
+            label: "Restroom",
+            config: { options: exports.yesNoEnum }
+        },
+        {
+            key: "siteAccessibility",
+            type: "enum",
+            label: "Site Accessibility",
+            config: { options: exports.yesNoEnum }
+        },
+        // Services (2)
+        {
+            key: "multiLineConferencing",
+            type: "enum",
+            label: "Multi-Line Conferencing",
+            config: { options: exports.yesNoEnum }
+        },
+        {
+            key: "interpreterServices",
+            type: "enum",
+            label: "Interpreter Services",
+            config: { options: exports.yesNoEnum }
+        }
+        // Total: 2+8+2+4+13+13+21+13+6+9+2 = 93 fields
+        // Note: Provider User Defined Fields would be added dynamically based on company configuration
+    ],
+    actions: [
+        {
+            operation: "validate-location",
+            mode: "background",
+            label: "Validate Location Data",
+            description: "Run comprehensive validation on Location Import Format data including duplicate detection and business rule validation"
+        }
+    ]
+};
+
+
+/***/ }),
+
 /***/ 99403:
 /***/ ((__unused_webpack_module, exports) => {
 
@@ -168233,6 +171233,1019 @@ exports.otherCertificationSheet = {
 
 /***/ }),
 
+/***/ 71789:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.payerLocationsSheet = void 0;
+exports.payerLocationsSheet = {
+    name: "Payer-Locations",
+    slug: "payer-locations",
+    access: ["*"],
+    fields: [
+        // Required Fields from Specification
+        {
+            key: "payer_name",
+            type: "string",
+            label: "Payer Name",
+            description: "Name of the payer organization"
+        },
+        {
+            key: "payer_key",
+            type: "string",
+            label: "Payer Key",
+            description: "GUID format: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX (8-4-4-4-12 characters)",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "location_name",
+            type: "string",
+            label: "Location Name",
+            description: "Name of the location"
+        },
+        {
+            key: "location_key",
+            type: "string",
+            label: "Location Key",
+            description: "GUID format: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX (8-4-4-4-12 characters). Multiple keys must be comma-delimited",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        // Standard X1-X10 Custom Fields
+        {
+            key: "x1",
+            type: "string",
+            label: "X1",
+            description: "Custom field X1"
+        },
+        {
+            key: "x2",
+            type: "string",
+            label: "X2",
+            description: "Custom field X2"
+        },
+        {
+            key: "x3",
+            type: "string",
+            label: "X3",
+            description: "Custom field X3"
+        },
+        {
+            key: "x4",
+            type: "string",
+            label: "X4",
+            description: "Custom field X4"
+        },
+        {
+            key: "x5",
+            type: "string",
+            label: "X5",
+            description: "Custom field X5"
+        },
+        {
+            key: "x6",
+            type: "string",
+            label: "X6",
+            description: "Custom field X6"
+        },
+        {
+            key: "x7",
+            type: "string",
+            label: "X7",
+            description: "Custom field X7"
+        },
+        {
+            key: "x8",
+            type: "string",
+            label: "X8",
+            description: "Custom field X8"
+        },
+        {
+            key: "x9",
+            type: "string",
+            label: "X9",
+            description: "Custom field X9"
+        },
+        {
+            key: "x10",
+            type: "string",
+            label: "X10",
+            description: "Custom field X10"
+        }
+    ],
+    actions: [
+        {
+            operation: "validatePayerLocations",
+            mode: "foreground",
+            label: "Validate Payer-Locations",
+            description: "Validate payer-locations data with comprehensive business rules and GUID format validation"
+        }
+    ]
+};
+
+
+/***/ }),
+
+/***/ 26705:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.payerSheet = void 0;
+exports.payerSheet = {
+    name: "Payer",
+    slug: "payer",
+    access: ["*"],
+    fields: [
+        // Core Payer Information
+        {
+            key: "payer_key",
+            type: "string",
+            label: "Payer Key",
+            description: "GUID format: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX. Required for UPDATE only, leave blank for ADD"
+        },
+        {
+            key: "payer_name",
+            type: "string",
+            label: "Payer Name",
+            description: "Name of the payer organization (max 100 characters)",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "plan_line_of_business",
+            type: "string",
+            label: "Plan/Line of Business",
+            description: "Plan or line of business (max 100 characters)"
+        },
+        {
+            key: "states",
+            type: "string",
+            label: "State(s)",
+            description: "Comma-delimited list of state values"
+        },
+        {
+            key: "website",
+            type: "string",
+            label: "Website",
+            description: "Payer website URL (max 2047 characters)"
+        },
+        // Primary Contact Information
+        {
+            key: "primary_contact_name",
+            type: "string",
+            label: "Primary Contact Name",
+            description: "Name of primary contact (max 50 characters)"
+        },
+        {
+            key: "primary_contact_email",
+            type: "string",
+            label: "Primary Contact Email",
+            description: "Email address of primary contact (max 100 characters)"
+        },
+        {
+            key: "primary_contact_phone",
+            type: "string",
+            label: "Primary Contact Phone",
+            description: "Phone number - 9, 10, or 12 digits only (no formatting)"
+        },
+        {
+            key: "primary_contact_phone_ext",
+            type: "string",
+            label: "Primary Contact Phone Ext.",
+            description: "Phone extension - number up to 20 digits"
+        },
+        {
+            key: "primary_contact_fax",
+            type: "string",
+            label: "Primary Contact Fax",
+            description: "Fax number - 9, 10, or 12 digits only (no formatting)"
+        },
+        // Secondary Contact Information
+        {
+            key: "secondary_contact_name",
+            type: "string",
+            label: "Secondary Contact Name",
+            description: "Name of secondary contact (max 50 characters)"
+        },
+        {
+            key: "secondary_contact_email",
+            type: "string",
+            label: "Secondary Contact Email",
+            description: "Email address of secondary contact (max 100 characters)"
+        },
+        {
+            key: "secondary_contact_phone",
+            type: "string",
+            label: "Secondary Contact Phone",
+            description: "Phone number - 9, 10, or 12 digits only (no formatting)"
+        },
+        {
+            key: "secondary_contact_phone_ext",
+            type: "string",
+            label: "Secondary Contact Phone Ext.",
+            description: "Phone extension - number up to 20 digits"
+        },
+        {
+            key: "secondary_contact_fax",
+            type: "string",
+            label: "Secondary Contact Fax",
+            description: "Fax number - 9, 10, or 12 digits only (no formatting)"
+        },
+        // Additional Information
+        {
+            key: "general_notes",
+            type: "string",
+            label: "General Notes",
+            description: "General notes about the payer (max 10,000 characters)"
+        },
+        {
+            key: "instructions",
+            type: "string",
+            label: "Instructions",
+            description: "Instructions for the payer (max 10,000 characters)"
+        },
+        {
+            key: "line_of_business_notes",
+            type: "string",
+            label: "Line of Business Notes",
+            description: "Notes specific to line of business (max 10,000 characters)"
+        },
+        {
+            key: "location_keys",
+            type: "string",
+            label: "Location Keys",
+            description: "Comma-delimited list of location GUIDs (XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX format)"
+        },
+        // Standard X1-X10 Custom Fields
+        {
+            key: "x1",
+            type: "string",
+            label: "X1",
+            description: "Custom field X1"
+        },
+        {
+            key: "x2",
+            type: "string",
+            label: "X2",
+            description: "Custom field X2"
+        },
+        {
+            key: "x3",
+            type: "string",
+            label: "X3",
+            description: "Custom field X3"
+        },
+        {
+            key: "x4",
+            type: "string",
+            label: "X4",
+            description: "Custom field X4"
+        },
+        {
+            key: "x5",
+            type: "string",
+            label: "X5",
+            description: "Custom field X5"
+        },
+        {
+            key: "x6",
+            type: "string",
+            label: "X6",
+            description: "Custom field X6"
+        },
+        {
+            key: "x7",
+            type: "string",
+            label: "X7",
+            description: "Custom field X7"
+        },
+        {
+            key: "x8",
+            type: "string",
+            label: "X8",
+            description: "Custom field X8"
+        },
+        {
+            key: "x9",
+            type: "string",
+            label: "X9",
+            description: "Custom field X9"
+        },
+        {
+            key: "x10",
+            type: "string",
+            label: "X10",
+            description: "Custom field X10"
+        }
+    ],
+    actions: [
+        {
+            operation: "validatePayer",
+            mode: "foreground",
+            label: "Validate Payer",
+            description: "Validate payer data with comprehensive business rules, character limits, and format validation"
+        }
+    ]
+};
+
+
+/***/ }),
+
+/***/ 1232:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.providerAppointmentDatesSheet = void 0;
+exports.providerAppointmentDatesSheet = {
+    name: "Provider Appointment Dates Import Format",
+    slug: "provider-appointment-dates",
+    access: ["*"],
+    fields: [
+        {
+            key: "providerName",
+            type: "string",
+            label: "Provider Name",
+            description: "Dummy field for provider identification",
+        },
+        {
+            key: "externalId",
+            type: "string",
+            label: "External ID",
+            description: "Provider identifier, required field"
+        },
+        {
+            key: "externalIdType",
+            type: "string",
+            label: "External ID Type",
+            description: "Type of external ID (NPI, InternalID, ProviderID, EmrID, BillingSystemID)"
+        },
+        {
+            key: "locationName",
+            type: "string",
+            label: "Location Name",
+            description: "Dummy field for location identification"
+        },
+        {
+            key: "locationKey",
+            type: "string",
+            label: "Location Key",
+            description: "Required field - GUID format: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "workflowType",
+            type: "enum",
+            label: "Workflow Type",
+            description: "Required field - must be 'Appointment' or 'Provider - Location Termination'",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ],
+            config: {
+                options: [
+                    { value: "Appointment", label: "Appointment" },
+                    { value: "Provider - Location Termination", label: "Provider - Location Termination" }
+                ]
+            }
+        },
+        {
+            key: "workflowName",
+            type: "string",
+            label: "Workflow Name",
+            description: "Dummy field for workflow identification"
+        },
+        {
+            key: "workflowKey",
+            type: "string",
+            label: "Workflow Key",
+            description: "Required field - GUID format: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "resolution",
+            type: "enum",
+            label: "Resolution",
+            description: "Required when Workflow Type = Appointment. Options: Approved, Withdrawn, Denied, Approved - Historical Only",
+            config: {
+                options: [
+                    { value: "", label: "" },
+                    { value: "Approved", label: "Approved" },
+                    { value: "Withdrawn", label: "Withdrawn" },
+                    { value: "Denied", label: "Denied" },
+                    { value: "Approved - Historical Only", label: "Approved - Historical Only" }
+                ]
+            }
+        },
+        {
+            key: "locationEmploymentType",
+            type: "string",
+            label: "Location Employment Type",
+            description: "Imported when Type = Appointment, must match company configurable list"
+        },
+        {
+            key: "appointmentDate",
+            type: "date",
+            label: "Appointment Date",
+            description: "Required when Resolution = Approved, format: m/d/yyyy"
+        },
+        {
+            key: "reappointmentDate",
+            type: "date",
+            label: "Reappointment Date",
+            description: "Required when Resolution = Approved, format: m/d/yyyy"
+        },
+        {
+            key: "reappointmentNotificationDate",
+            type: "date",
+            label: "Reappointment Notification Date",
+            description: "Format: m/d/yyyy, must be 1-999 days before Reappointment Date"
+        },
+        {
+            key: "inactiveDate",
+            type: "date",
+            label: "Inactive Date",
+            description: "Required when Workflow Type = 'Provider - Location Termination', format: m/d/yyyy"
+        },
+        {
+            key: "notes",
+            type: "string",
+            label: "Notes",
+            description: "Optional, Required when Resolution = Denied (max 500 characters)"
+        },
+        {
+            key: "providerCategory",
+            type: "string",
+            label: "Provider Category",
+            description: "Must match a value defined in company settings"
+        },
+        // X1-X10 Custom Fields (Standard requirement)
+        {
+            key: "x1",
+            type: "string",
+            label: "X1",
+            description: "Custom field X1"
+        },
+        {
+            key: "x2",
+            type: "string",
+            label: "X2",
+            description: "Custom field X2"
+        },
+        {
+            key: "x3",
+            type: "string",
+            label: "X3",
+            description: "Custom field X3"
+        },
+        {
+            key: "x4",
+            type: "string",
+            label: "X4",
+            description: "Custom field X4"
+        },
+        {
+            key: "x5",
+            type: "string",
+            label: "X5",
+            description: "Custom field X5"
+        },
+        {
+            key: "x6",
+            type: "string",
+            label: "X6",
+            description: "Custom field X6"
+        },
+        {
+            key: "x7",
+            type: "string",
+            label: "X7",
+            description: "Custom field X7"
+        },
+        {
+            key: "x8",
+            type: "string",
+            label: "X8",
+            description: "Custom field X8"
+        },
+        {
+            key: "x9",
+            type: "string",
+            label: "X9",
+            description: "Custom field X9"
+        },
+        {
+            key: "x10",
+            type: "string",
+            label: "X10",
+            description: "Custom field X10"
+        }
+    ],
+    actions: [
+        {
+            operation: "validateProviderAppointmentDates",
+            mode: "foreground",
+            label: "Validate Provider Appointment Dates",
+            description: "Validate provider appointment dates data with comprehensive business rules"
+        }
+    ]
+};
+
+
+/***/ }),
+
+/***/ 82499:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.providerLocationDetailsSheet = void 0;
+exports.providerLocationDetailsSheet = {
+    name: "Provider Location Details Import Format",
+    slug: "provider-location-details",
+    access: ["*"],
+    fields: [
+        {
+            key: "providerName",
+            type: "string",
+            label: "Provider Name",
+            description: "Provider Name (Dummy Column)",
+        },
+        {
+            key: "externalId",
+            type: "string",
+            label: "External ID",
+            description: "Required field - Key field for updating"
+        },
+        {
+            key: "externalIdType",
+            type: "string",
+            label: "External ID Type",
+            description: "Key field for updating, Required field - Must be NPI, InternalID, ProviderID, EmrID, or BillingSystemID"
+        },
+        {
+            key: "locationName",
+            type: "string",
+            label: "Location Name",
+            description: "Location Name (Dummy Column)"
+        },
+        {
+            key: "locationKey",
+            type: "string",
+            label: "Location Key",
+            description: "Required Field - Must be a valid GUID format (XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "placementDate",
+            type: "date",
+            label: "Placement Date",
+            description: "Date must be formatted as m/d/yyyy"
+        },
+        {
+            key: "locationEmploymentType",
+            type: "string",
+            label: "Location Employment Type",
+            description: "Location Employment Type from dropdown"
+        },
+        {
+            key: "specialty",
+            type: "string",
+            label: "Specialty",
+            description: "Specialty from company settings - Users can add multiple using '|' separator"
+        },
+        {
+            key: "taxonomy",
+            type: "string",
+            label: "Taxonomy",
+            description: "Taxonomy code - Maximum 100 characters"
+        },
+        {
+            key: "contractStart",
+            type: "date",
+            label: "Contract Start",
+            description: "Contract Start Date - Must be formatted as m/d/yyyy"
+        },
+        {
+            key: "contractedHours",
+            type: "string",
+            label: "Contracted Hours",
+            description: "Contracted Hours - Maximum 10 characters"
+        },
+        {
+            key: "expectedStartDate",
+            type: "date",
+            label: "Expected Start Date",
+            description: "Expected Start Date - Must be formatted as m/d/yyyy"
+        },
+        {
+            key: "credentialingOverride",
+            type: "enum",
+            label: "Credentialing Override",
+            description: "Must be 'End Date', 'Pending', 'None', or null",
+            config: {
+                options: [
+                    { value: "End Date", label: "End Date" },
+                    { value: "Pending", label: "Pending" },
+                    { value: "None", label: "None" },
+                    { value: "", label: "(blank)" }
+                ]
+            }
+        },
+        {
+            key: "endDate",
+            type: "date",
+            label: "End Date",
+            description: "End Date - Must be formatted as m/d/yyyy. Required if Credentialing Override = 'End Date'"
+        },
+        {
+            key: "pendingDate",
+            type: "date",
+            label: "Pending Date",
+            description: "Pending Date - Must be formatted as m/d/yyyy. Required if Credentialing Override = 'Pending'"
+        },
+        {
+            key: "firstShift",
+            type: "date",
+            label: "First Shift",
+            description: "First Shift Date - Must be formatted as m/d/yyyy"
+        },
+        {
+            key: "lastShift",
+            type: "date",
+            label: "Last Shift",
+            description: "Last Shift Date - Must be formatted as m/d/yyyy"
+        },
+        {
+            key: "locationPreference",
+            type: "string",
+            label: "Location Preference",
+            description: "Location Preference from dropdown"
+        },
+        {
+            key: "seesPatients",
+            type: "enum",
+            label: "Sees Patients?",
+            description: "Must be Y or N",
+            config: {
+                options: [
+                    { value: "Y", label: "Yes" },
+                    { value: "N", label: "No" },
+                    { value: "", label: "(blank)" }
+                ]
+            }
+        },
+        {
+            key: "providerLocationArchived",
+            type: "enum",
+            label: "Provider Location Archived?",
+            description: "Must be Y or N",
+            config: {
+                options: [
+                    { value: "Y", label: "Yes" },
+                    { value: "N", label: "No" },
+                    { value: "", label: "(blank)" }
+                ]
+            }
+        },
+        {
+            key: "acceptingNewPatients",
+            type: "enum",
+            label: "Accepting New Patients",
+            description: "Must be Y or N",
+            config: {
+                options: [
+                    { value: "Y", label: "Yes" },
+                    { value: "N", label: "No" },
+                    { value: "", label: "(blank)" }
+                ]
+            }
+        },
+        {
+            key: "patientsSeen",
+            type: "string",
+            label: "Patients Seen",
+            description: "Patients Seen from dropdown"
+        },
+        {
+            key: "pcpOrSpecialist",
+            type: "enum",
+            label: "PCP or Specialist",
+            description: "Must be 'Blank', 'PCP', or 'Specialist'",
+            config: {
+                options: [
+                    { value: "", label: "(blank)" },
+                    { value: "PCP", label: "PCP" },
+                    { value: "Specialist", label: "Specialist" }
+                ]
+            }
+        },
+        {
+            key: "payerDirectory",
+            type: "enum",
+            label: "Payer Directory",
+            description: "Must be Y or N",
+            config: {
+                options: [
+                    { value: "Y", label: "Yes" },
+                    { value: "N", label: "No" },
+                    { value: "", label: "(blank)" }
+                ]
+            }
+        },
+        {
+            key: "virtualCare",
+            type: "enum",
+            label: "Virtual Care",
+            description: "Must be Y or N",
+            config: {
+                options: [
+                    { value: "Y", label: "Yes" },
+                    { value: "N", label: "No" },
+                    { value: "", label: "(blank)" }
+                ]
+            }
+        },
+        {
+            key: "telephonicCare",
+            type: "enum",
+            label: "Telephonic Care",
+            description: "Must be Y or N",
+            config: {
+                options: [
+                    { value: "Y", label: "Yes" },
+                    { value: "N", label: "No" },
+                    { value: "", label: "(blank)" }
+                ]
+            }
+        },
+        {
+            key: "remoteMonitoring",
+            type: "enum",
+            label: "Remote Monitoring",
+            description: "Must be Y or N",
+            config: {
+                options: [
+                    { value: "Y", label: "Yes" },
+                    { value: "N", label: "No" },
+                    { value: "", label: "(blank)" }
+                ]
+            }
+        },
+        {
+            key: "minAgeSeen",
+            type: "string",
+            label: "Min Age Seen",
+            description: "Minimum Age Seen - Maximum 120 characters"
+        },
+        {
+            key: "maxAgeSeen",
+            type: "string",
+            label: "Max Age Seen",
+            description: "Maximum Age Seen - Maximum 120 characters"
+        },
+        {
+            key: "membershipCapacity",
+            type: "string",
+            label: "Membership Capacity",
+            description: "Membership Capacity - Maximum 9999"
+        },
+        {
+            key: "coveringPhysiciansExternalId",
+            type: "string",
+            label: "Covering Physician(s) External ID",
+            description: "External IDs of covering physicians - Multiple values can be separated by '|'"
+        },
+        // User Defined Fields X1-X10
+        {
+            key: "x1",
+            type: "string",
+            label: "X1",
+            description: "User Defined Field X1 - Multi-select UDFs are pipe-delimited ('|')"
+        },
+        {
+            key: "x2",
+            type: "string",
+            label: "X2",
+            description: "User Defined Field X2 - Multi-select UDFs are pipe-delimited ('|')"
+        },
+        {
+            key: "x3",
+            type: "string",
+            label: "X3",
+            description: "User Defined Field X3 - Multi-select UDFs are pipe-delimited ('|')"
+        },
+        {
+            key: "x4",
+            type: "string",
+            label: "X4",
+            description: "User Defined Field X4 - Multi-select UDFs are pipe-delimited ('|')"
+        },
+        {
+            key: "x5",
+            type: "string",
+            label: "X5",
+            description: "User Defined Field X5 - Multi-select UDFs are pipe-delimited ('|')"
+        },
+        {
+            key: "x6",
+            type: "string",
+            label: "X6",
+            description: "User Defined Field X6 - Multi-select UDFs are pipe-delimited ('|')"
+        },
+        {
+            key: "x7",
+            type: "string",
+            label: "X7",
+            description: "User Defined Field X7 - Multi-select UDFs are pipe-delimited ('|')"
+        },
+        {
+            key: "x8",
+            type: "string",
+            label: "X8",
+            description: "User Defined Field X8 - Multi-select UDFs are pipe-delimited ('|')"
+        },
+        {
+            key: "x9",
+            type: "string",
+            label: "X9",
+            description: "User Defined Field X9 - Multi-select UDFs are pipe-delimited ('|')"
+        },
+        {
+            key: "x10",
+            type: "string",
+            label: "X10",
+            description: "User Defined Field X10 - Multi-select UDFs are pipe-delimited ('|')"
+        },
+    ],
+};
+
+
+/***/ }),
+
+/***/ 45177:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.providerPayerEnrollmentDatesSheet = void 0;
+exports.providerPayerEnrollmentDatesSheet = {
+    name: "Provider Payer Enrollment Dates Import Format",
+    slug: "provider-payer-enrollment-dates",
+    access: ["*"],
+    fields: [
+        {
+            key: "providerName",
+            type: "string",
+            label: "Provider Name",
+            description: "Provider Name (Dummy Field)",
+        },
+        {
+            key: "externalId",
+            type: "string",
+            label: "External ID",
+            description: "Required field - Key field for updating"
+        },
+        {
+            key: "externalIdType",
+            type: "string",
+            label: "External ID Type",
+            description: "Key field for updating, Required field - Must be NPI, InternalID, ProviderID, EmrID, or BillingSystemID"
+        },
+        {
+            key: "locationName",
+            type: "string",
+            label: "Location Name",
+            description: "Location Name (Dummy Field)"
+        },
+        {
+            key: "locationKey",
+            type: "string",
+            label: "Location Key",
+            description: "Required Field - Must be a valid GUID format (XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "payerName",
+            type: "string",
+            label: "Payer Name",
+            description: "Payer Name (Dummy Field)"
+        },
+        {
+            key: "payerKey",
+            type: "string",
+            label: "Payer Key",
+            description: "Required Field - Must be a valid GUID format (XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "workflowName",
+            type: "string",
+            label: "Workflow Name",
+            description: "Workflow Name (Dummy Field)"
+        },
+        {
+            key: "workflowKey",
+            type: "string",
+            label: "Workflow Key",
+            description: "Required Field - Must be a valid GUID format (XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "resolution",
+            type: "enum",
+            label: "Resolution",
+            description: "Required field - Must be Approved, Participating, Rejected, Denied, Withdrawn, Non-Participating, Non-Billing, or Terminated",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ],
+            config: {
+                options: [
+                    { value: "Approved", label: "Approved" },
+                    { value: "Participating", label: "Participating" },
+                    { value: "Rejected", label: "Rejected" },
+                    { value: "Denied", label: "Denied" },
+                    { value: "Withdrawn", label: "Withdrawn" },
+                    { value: "Non-Participating", label: "Non-Participating" },
+                    { value: "Non-Billing", label: "Non-Billing" },
+                    { value: "Terminated", label: "Terminated" }
+                ]
+            }
+        },
+        {
+            key: "effectiveDate",
+            type: "date",
+            label: "Effective Date",
+            description: "Effective Date - Must be formatted as m/d/yyyy. Can only be input if Resolution is Approved or Participating"
+        },
+        {
+            key: "reEnrollmentDate",
+            type: "date",
+            label: "Re-Enrollment Date",
+            description: "Re-Enrollment Date - Must be formatted as m/d/yyyy. Must be after Effective Date. Can only be input if Resolution is Approved or Participating"
+        },
+        {
+            key: "notes",
+            type: "string",
+            label: "Notes",
+            description: "Notes field for additional information"
+        },
+        {
+            key: "payerProviderId",
+            type: "string",
+            label: "Payer Provider ID",
+            description: "Payer Provider ID - Maximum 50 characters"
+        },
+    ],
+};
+
+
+/***/ }),
+
 /***/ 39085:
 /***/ ((__unused_webpack_module, exports) => {
 
@@ -168637,11 +172650,20 @@ const board_certification_sheet_1 = __nccwpck_require__(71303);
 const other_certification_sheet_1 = __nccwpck_require__(45459);
 const malpractice_insurance_sheet_1 = __nccwpck_require__(99403);
 const education_gap_sheet_1 = __nccwpck_require__(23519);
+const payer_locations_sheet_1 = __nccwpck_require__(71789);
+const payer_sheet_1 = __nccwpck_require__(26705);
+const cds_certificate_sheet_1 = __nccwpck_require__(70915);
+const cme_sheet_1 = __nccwpck_require__(70078);
+const education_sheet_1 = __nccwpck_require__(76933);
+const provider_appointment_dates_sheet_1 = __nccwpck_require__(1232);
+const provider_location_details_sheet_1 = __nccwpck_require__(82499);
+const provider_payer_enrollment_dates_sheet_1 = __nccwpck_require__(45177);
+const location_sheet_1 = __nccwpck_require__(73186);
 exports.companyWorkbook = {
     name: "Company Workbook",
     namespace: "workbook:qgenda-company",
     labels: ["pinned"],
-    sheets: [users_sheet_1.usersSheet, demographic_sheet_1.demographicSheet, demographic_v2_sheet_1.demographicV2Sheet, demographic_reference_sheet_1.demographicReferenceSheet, state_license_sheet_1.stateLicenseSheet, dea_license_sheet_1.deaLicenseSheet, affiliation_sheet_1.affiliationSheet, board_certification_sheet_1.boardCertificationSheet, other_certification_sheet_1.otherCertificationSheet, malpractice_insurance_sheet_1.malpracticeInsuranceSheet, education_gap_sheet_1.educationGapSheet],
+    sheets: [users_sheet_1.usersSheet, demographic_sheet_1.demographicSheet, demographic_v2_sheet_1.demographicV2Sheet, demographic_reference_sheet_1.demographicReferenceSheet, state_license_sheet_1.stateLicenseSheet, dea_license_sheet_1.deaLicenseSheet, affiliation_sheet_1.affiliationSheet, board_certification_sheet_1.boardCertificationSheet, other_certification_sheet_1.otherCertificationSheet, malpractice_insurance_sheet_1.malpracticeInsuranceSheet, education_gap_sheet_1.educationGapSheet, payer_locations_sheet_1.payerLocationsSheet, payer_sheet_1.payerSheet, cds_certificate_sheet_1.cdsCertificateSheet, cme_sheet_1.cmeSheet, education_sheet_1.educationSheet, provider_appointment_dates_sheet_1.providerAppointmentDatesSheet, provider_location_details_sheet_1.providerLocationDetailsSheet, provider_payer_enrollment_dates_sheet_1.providerPayerEnrollmentDatesSheet, location_sheet_1.locationSheet],
     actions: [{
             operation: "downloadWorkbook",
             mode: "foreground",
@@ -168688,6 +172710,24 @@ const debug_spaces_listener_1 = __nccwpck_require__(40807);
 const malpractice_deduplication_action_1 = __nccwpck_require__(88118);
 const education_gap_validation_listener_1 = __nccwpck_require__(40078);
 const validate_education_gap_action_1 = __nccwpck_require__(56345);
+const payer_locations_validation_listener_1 = __nccwpck_require__(67390);
+const validate_payer_locations_action_1 = __nccwpck_require__(77262);
+const payer_validation_listener_1 = __nccwpck_require__(20764);
+const validate_payer_action_1 = __nccwpck_require__(33926);
+const cds_certificate_validation_listener_1 = __nccwpck_require__(1050);
+const validate_cds_certificate_action_1 = __nccwpck_require__(11172);
+const cme_validation_listener_1 = __nccwpck_require__(11654);
+const validate_cme_action_1 = __nccwpck_require__(98612);
+const education_validation_listener_1 = __nccwpck_require__(36106);
+const validate_education_action_1 = __nccwpck_require__(73116);
+const provider_appointment_dates_validation_listener_1 = __nccwpck_require__(15613);
+const validate_provider_appointment_dates_action_1 = __nccwpck_require__(93027);
+const provider_location_details_validation_listener_1 = __nccwpck_require__(97447);
+const validate_provider_location_details_action_1 = __nccwpck_require__(55587);
+const provider_payer_enrollment_dates_validation_listener_1 = __nccwpck_require__(42595);
+const validate_provider_payer_enrollment_dates_action_1 = __nccwpck_require__(97818);
+const location_validation_listener_1 = __nccwpck_require__(91780);
+const validate_location_action_1 = __nccwpck_require__(91248);
 function default_1(listener) {
     // Generate field mappings dynamically from sheet configurations
     const fieldMappings = (0, field_mappings_1.generateFieldMappings)();
@@ -168719,6 +172759,24 @@ function default_1(listener) {
     listener.use(validate_malpractice_insurance_action_1.validateMalpracticeInsuranceAction);
     listener.use(education_gap_validation_listener_1.educationGapValidationHook);
     listener.use(validate_education_gap_action_1.validateEducationGapAction);
+    listener.use(payer_locations_validation_listener_1.payerLocationsValidationHook);
+    listener.use(validate_payer_locations_action_1.validatePayerLocationsAction);
+    listener.use(payer_validation_listener_1.payerValidationHook);
+    listener.use(validate_payer_action_1.validatePayerAction);
+    listener.use(cds_certificate_validation_listener_1.cdsCertificateValidationHook);
+    listener.use(validate_cds_certificate_action_1.validateCDSCertificateAction);
+    listener.use(cme_validation_listener_1.cmeValidationHook);
+    listener.use(validate_cme_action_1.validateCMEAction);
+    listener.use(education_validation_listener_1.educationValidationHook);
+    listener.use(validate_education_action_1.validateEducationAction);
+    listener.use(provider_appointment_dates_validation_listener_1.providerAppointmentDatesValidationHook);
+    listener.use(validate_provider_appointment_dates_action_1.validateProviderAppointmentDatesAction);
+    listener.use(provider_location_details_validation_listener_1.providerLocationDetailsValidationHook);
+    listener.use(validate_provider_location_details_action_1.validateProviderLocationDetailsAction);
+    listener.use(provider_payer_enrollment_dates_validation_listener_1.providerPayerEnrollmentDatesValidationHook);
+    listener.use(validate_provider_payer_enrollment_dates_action_1.validateProviderPayerEnrollmentDatesAction);
+    listener.use(location_validation_listener_1.locationValidationHook);
+    listener.use(validate_location_action_1.validateLocationAction);
     listener.use(debug_spaces_listener_1.debugSpacesListener); // Add debug listener
     // Add malpractice insurance deduplication action
     (0, malpractice_deduplication_action_1.malpracticeDeduplicationAction)(listener);
@@ -168975,6 +173033,288 @@ exports.affiliationValidationHook = (0, plugin_record_hook_1.recordHook)('affili
         }
     }
 });
+
+
+/***/ }),
+
+/***/ 1050:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.cdsCertificateValidationHook = void 0;
+const plugin_record_hook_1 = __nccwpck_require__(32095);
+const cdsCertificateValidationHook = (listener) => {
+    listener.use((0, plugin_record_hook_1.recordHook)("cds-certificate", (record) => {
+        // Get all field values
+        const externalId = record.get("external_id");
+        const externalIdType = record.get("external_id_type");
+        const autoVerify = record.get("auto_verify");
+        const licenseNumber = record.get("license_number");
+        const state = record.get("state");
+        const schedule = record.get("schedule");
+        const status = record.get("status");
+        const disciplineOnFile = record.get("discipline_on_file");
+        const issueDate = record.get("issue_date");
+        const expirationDate = record.get("expiration_date");
+        const monitorExpirationDate = record.get("monitor_expiration_date");
+        const recordViewableByProvider = record.get("record_viewable_by_provider");
+        const fileViewableByProvider = record.get("file_viewable_by_provider");
+        const ignoreRequiredFieldsValidation = record.get("ignore_required_fields_validation");
+        const fileKey = record.get("file_key");
+        const note = record.get("note");
+        const user = record.get("user");
+        const timestamp = record.get("timestamp");
+        // Required field validations
+        if (!externalId?.trim()) {
+            record.addError("external_id", "External Id required");
+        }
+        if (!externalIdType?.trim()) {
+            record.addError("external_id_type", "External Id Type required");
+        }
+        if (!autoVerify?.trim()) {
+            record.addError("auto_verify", "Auto-Verify? must be Y or N");
+        }
+        if (!licenseNumber?.trim()) {
+            record.addError("license_number", "License Number required");
+        }
+        if (!state?.trim()) {
+            record.addError("state", "State required");
+        }
+        if (!expirationDate?.trim()) {
+            record.addError("expiration_date", "Expiration Date required");
+        }
+        // Y/N validations
+        if (autoVerify?.trim() && !["Y", "N"].includes(autoVerify.trim())) {
+            record.addError("auto_verify", "Auto-Verify? must be Y or N");
+        }
+        if (disciplineOnFile?.trim() && !["Y", "N"].includes(disciplineOnFile.trim())) {
+            record.addError("discipline_on_file", "Discipline on File? must be Y or N");
+        }
+        if (ignoreRequiredFieldsValidation?.trim() && !["Y", "N"].includes(ignoreRequiredFieldsValidation.trim())) {
+            record.addError("ignore_required_fields_validation", "Ignore Required Fields Validation? must be Y or N");
+        }
+        // T/F validations
+        if (monitorExpirationDate?.trim() && !["T", "F"].includes(monitorExpirationDate.trim())) {
+            record.addError("monitor_expiration_date", "Monitor Expiration Date must be T or F");
+        }
+        if (recordViewableByProvider?.trim() && !["T", "F"].includes(recordViewableByProvider.trim())) {
+            record.addError("record_viewable_by_provider", "Record Viewable by Provider must be T or F");
+        }
+        if (fileViewableByProvider?.trim() && !["T", "F"].includes(fileViewableByProvider.trim())) {
+            record.addError("file_viewable_by_provider", "File Viewable by Provider must be T or F");
+        }
+        // Cross-field validation for viewable fields
+        if ((recordViewableByProvider?.trim() || fileViewableByProvider?.trim())) {
+            if (!recordViewableByProvider?.trim() || !fileViewableByProvider?.trim()) {
+                record.addError("record_viewable_by_provider", "If one of Record Viewable by Provider or File Viewable by Provider are imported, the other must also be imported");
+            }
+        }
+        // Warning for viewable fields logic
+        if (recordViewableByProvider === "F" && fileViewableByProvider === "T") {
+            record.addInfo("file_viewable_by_provider", "File Viewable by Provider must be set to 'F' on records where Record Viewable by Provider is set to 'F'");
+        }
+        // Date format validation (m/d/yyyy)
+        const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+        if (issueDate?.trim() && !dateRegex.test(issueDate.trim())) {
+            record.addError("issue_date", "Issue Date must be formatted as m/d/yyyy");
+        }
+        if (expirationDate?.trim() && !dateRegex.test(expirationDate.trim())) {
+            record.addError("expiration_date", "Expiration Date must be formatted as m/d/yyyy");
+        }
+        if (timestamp?.trim() && !dateRegex.test(timestamp.trim())) {
+            record.addError("timestamp", "Timestamp must be formatted as m/d/yyyy");
+        }
+        // Date logic validation (issue date before expiration date)
+        if (issueDate?.trim() && expirationDate?.trim()) {
+            const issue = new Date(issueDate);
+            const expiration = new Date(expirationDate);
+            if (issue >= expiration) {
+                record.addError("issue_date", "Issue Date must be before Expiration Date");
+            }
+        }
+        // GUID format validation for File Key
+        const guidRegex = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/i;
+        if (fileKey?.trim() && !guidRegex.test(fileKey.trim())) {
+            record.addError("file_key", "File Key must be a valid GUID");
+        }
+        // Character limit validation
+        if (note && note.length > 10000) {
+            record.addError("note", "Note exceeds character limit of 10000");
+        }
+        // Warning for empty user field
+        if (!user?.trim()) {
+            record.addInfo("user", "No User listed, so 'Credentialing System' will be listed");
+        }
+        // TODO: Implement API-based validations:
+        // - External ID Type validation against acceptable options
+        // - State validation against state dropdown
+        // - Schedule validation against Schedule multi-select dropdown
+        // - Status validation against status dropdown
+        // - User validation against Cred Spec emails
+        // - File Key validation against existing files in system
+        // - User defined fields validation
+        return record;
+    }));
+};
+exports.cdsCertificateValidationHook = cdsCertificateValidationHook;
+
+
+/***/ }),
+
+/***/ 11654:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.cmeValidationHook = void 0;
+const plugin_record_hook_1 = __nccwpck_require__(32095);
+const cmeValidationHook = (listener) => {
+    listener.use((0, plugin_record_hook_1.recordHook)("cme", (record) => {
+        // Get all field values
+        const name = record.get("name");
+        const externalId = record.get("externalId");
+        const externalIdType = record.get("externalIdType");
+        const category = record.get("category");
+        const cmeContents = record.get("cmeContents");
+        const credits = record.get("credits");
+        const cmeDescription = record.get("cmeDescription");
+        const completedOn = record.get("completedOn");
+        const validUntil = record.get("validUntil");
+        const states = record.get("states");
+        const recordViewableByProvider = record.get("recordViewableByProvider");
+        const frequency = record.get("frequency");
+        const hoursRequired = record.get("hoursRequired");
+        const fileViewableByProvider = record.get("fileViewableByProvider");
+        const fileKey = record.get("fileKey");
+        const note = record.get("note");
+        const user = record.get("user");
+        const timestamp = record.get("timestamp");
+        // Required field validations
+        if (!name?.trim()) {
+            record.addError("name", "Name required");
+        }
+        if (!externalId?.trim()) {
+            record.addError("externalId", "External Id required");
+        }
+        if (!externalIdType?.trim()) {
+            record.addError("externalIdType", "External Id Type required");
+        }
+        // Character limit validations
+        if (name && name.length > 100) {
+            record.addError("name", "Name exceeds character limit of 100");
+        }
+        if (cmeContents && cmeContents.length > 100) {
+            record.addError("cmeContents", "CME Contents exceeds character limit of 100");
+        }
+        if (cmeDescription && cmeDescription.length > 500) {
+            record.addError("cmeDescription", "CME Description exceeds character limit of 500");
+        }
+        if (note && note.length > 10000) {
+            record.addError("note", "Note exceeds character limit of 10000");
+        }
+        // Credits validation
+        if (credits) {
+            // Check for non-numeral characters
+            const creditsNumeric = /^\d*\.?\d*$/.test(credits);
+            if (!creditsNumeric) {
+                record.addError("credits", "Credits must be a number");
+            }
+            // Check character limit
+            if (credits.length > 6) {
+                record.addError("credits", "Credits exceeds character limit of 6");
+            }
+        }
+        // Date format validations
+        const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+        if (completedOn) {
+            if (!dateRegex.test(completedOn)) {
+                record.addError("completedOn", "Completed On must be formatted as m/d/yyyy");
+            }
+            else {
+                // Validate actual date
+                const [month, day, year] = completedOn.split('/').map(Number);
+                const date = new Date(year, month - 1, day);
+                if (date.getMonth() !== month - 1 || date.getDate() !== day || date.getFullYear() !== year) {
+                    record.addError("completedOn", "Completed On must be formatted as m/d/yyyy");
+                }
+            }
+        }
+        if (validUntil) {
+            if (!dateRegex.test(validUntil)) {
+                record.addError("validUntil", "Valid Until must be formatted as m/d/yyyy");
+            }
+            else {
+                // Validate actual date
+                const [month, day, year] = validUntil.split('/').map(Number);
+                const date = new Date(year, month - 1, day);
+                if (date.getMonth() !== month - 1 || date.getDate() !== day || date.getFullYear() !== year) {
+                    record.addError("validUntil", "Valid Until must be formatted as m/d/yyyy");
+                }
+            }
+        }
+        // Timestamp format validation (m/d/yyyy h:mm:ss)
+        if (timestamp) {
+            const timestampRegex = /^\d{1,2}\/\d{1,2}\/\d{4} \d{1,2}:\d{2}:\d{2}$/;
+            if (!timestampRegex.test(timestamp)) {
+                record.addError("timestamp", "Timestamp must be formatted as m/d/yyyy h:mm:ss");
+            }
+            else {
+                // Validate actual date/time
+                const [datePart, timePart] = timestamp.split(' ');
+                const [month, day, year] = datePart.split('/').map(Number);
+                const [hour, minute, second] = timePart.split(':').map(Number);
+                const date = new Date(year, month - 1, day, hour, minute, second);
+                if (date.getMonth() !== month - 1 || date.getDate() !== day || date.getFullYear() !== year) {
+                    record.addError("timestamp", "Timestamp must be formatted as m/d/yyyy h:mm:ss");
+                }
+            }
+        }
+        // T/F field validations
+        if (recordViewableByProvider && recordViewableByProvider !== "T" && recordViewableByProvider !== "F") {
+            record.addError("recordViewableByProvider", "Viewable by Provider must be T or F");
+        }
+        if (fileViewableByProvider && fileViewableByProvider !== "T" && fileViewableByProvider !== "F") {
+            record.addError("fileViewableByProvider", "File Viewable by Provider must be T or F");
+        }
+        // Hours Required validation
+        if (hoursRequired) {
+            const hoursNum = parseInt(hoursRequired);
+            if (isNaN(hoursNum) || hoursNum < 1 || hoursNum > 50 || !Number.isInteger(hoursNum)) {
+                record.addError("hoursRequired", "Hours Required must be a whole number 1-50");
+            }
+        }
+        // GUID format validation for File Key
+        if (fileKey) {
+            const guidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+            if (!guidRegex.test(fileKey)) {
+                record.addError("fileKey", "File Key must be a valid GUID");
+            }
+        }
+        // States validation (would need actual state list validation in real implementation)
+        if (states) {
+            // Basic validation - check if pipe-delimited format is used
+            const stateList = states.split('|');
+            // In real implementation, validate each state against dropdown values
+        }
+        // Category validation (would need actual category list validation in real implementation)
+        if (category) {
+            // In real implementation, validate against dropdown values
+        }
+        // Frequency validation (would need actual frequency list validation in real implementation)
+        if (frequency) {
+            // In real implementation, validate against dropdown values
+        }
+        // User validation warning
+        if (!user?.trim()) {
+            record.addWarning("user", "No User listed, so \"Credentialing System\" will be listed");
+        }
+        return record;
+    }));
+};
+exports.cmeValidationHook = cmeValidationHook;
 
 
 /***/ }),
@@ -169892,6 +174232,632 @@ exports.educationGapValidationHook = educationGapValidationHook;
 
 /***/ }),
 
+/***/ 36106:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.educationValidationHook = void 0;
+const plugin_record_hook_1 = __nccwpck_require__(32095);
+const educationValidationHook = (listener) => {
+    listener.use((0, plugin_record_hook_1.recordHook)("education", (record) => {
+        // Get all field values
+        const externalId = record.get("externalId");
+        const externalIdType = record.get("externalIdType");
+        const educationType = record.get("educationType");
+        const foreignGraduate = record.get("foreignGraduate");
+        const ecfmgNumber = record.get("ecfmgNumber");
+        const ecfmgIssueDate = record.get("ecfmgIssueDate");
+        const fifthPathwayNumber = record.get("fifthPathwayNumber");
+        const fifthPathwayIssueDate = record.get("fifthPathwayIssueDate");
+        const degree = record.get("degree");
+        const areaOfStudy = record.get("areaOfStudy");
+        const schoolName = record.get("schoolName");
+        const institutionEmail = record.get("institutionEmail");
+        const addressLine1 = record.get("addressLine1");
+        const addressLine2 = record.get("addressLine2");
+        const city = record.get("city");
+        const state = record.get("state");
+        const zip = record.get("zip");
+        const country = record.get("country");
+        const phone = record.get("phone");
+        const ext = record.get("ext");
+        const fax = record.get("fax");
+        const startDate = record.get("startDate");
+        const endDate = record.get("endDate");
+        const didYouGraduate = record.get("didYouGraduate");
+        const viewableByProvider = record.get("viewableByProvider");
+        const website = record.get("website");
+        const fileViewableByProvider = record.get("fileViewableByProvider");
+        const ignoreRequiredFieldsValidation = record.get("ignoreRequiredFieldsValidation");
+        const fileKey = record.get("fileKey");
+        const note = record.get("note");
+        const user = record.get("user");
+        const timestamp = record.get("timestamp");
+        // Required field validations
+        if (!externalId?.trim()) {
+            record.addError("externalId", "External Id required");
+        }
+        if (!externalIdType?.trim()) {
+            record.addError("externalIdType", "External Id Type required");
+        }
+        if (!educationType?.trim()) {
+            record.addError("educationType", "Education Type not supported");
+        }
+        if (!degree?.trim()) {
+            record.addError("degree", "Degree not supported");
+        }
+        // External ID validation - both must be provided together
+        if ((externalId && !externalIdType) || (!externalId && externalIdType)) {
+            record.addError("externalId", "Must provide both External ID and External ID Type");
+            record.addError("externalIdType", "Must provide both External ID and External ID Type");
+        }
+        // Education Type validation
+        const validEducationTypes = ["Bachelor's", "Master's", "Doctorate", "Medical School", "Professional School", "Fifth Pathway"];
+        if (educationType && !validEducationTypes.includes(educationType)) {
+            record.addError("educationType", "Education Type not supported");
+        }
+        // T/F field validations
+        if (foreignGraduate && foreignGraduate !== "T" && foreignGraduate !== "F") {
+            record.addError("foreignGraduate", "Foreign Graduate must be T or F");
+        }
+        if (viewableByProvider && viewableByProvider !== "T" && viewableByProvider !== "F") {
+            record.addError("viewableByProvider", "Viewable by Provider must be T or F");
+        }
+        if (fileViewableByProvider && fileViewableByProvider !== "T" && fileViewableByProvider !== "F") {
+            record.addError("fileViewableByProvider", "File Viewable by Provider must be T or F");
+        }
+        // Y/N field validations
+        if (didYouGraduate && didYouGraduate !== "Y" && didYouGraduate !== "N") {
+            record.addError("didYouGraduate", "Did you graduate must be Y or N");
+        }
+        if (ignoreRequiredFieldsValidation && ignoreRequiredFieldsValidation !== "Y" && ignoreRequiredFieldsValidation !== "N") {
+            record.addError("ignoreRequiredFieldsValidation", "Ignore Required Fields Validation? must be Y or N");
+        }
+        // Character limit validations
+        if (ecfmgNumber && ecfmgNumber.length > 8) {
+            record.addError("ecfmgNumber", "ECFMG Number exceeds character limit of 8");
+        }
+        if (fifthPathwayNumber && fifthPathwayNumber.length > 50) {
+            record.addError("fifthPathwayNumber", "Fifth Pathway Number exceeds character limit of 50");
+        }
+        if (areaOfStudy && areaOfStudy.length > 100) {
+            record.addError("areaOfStudy", "Area of Study / Major exceeds character limit of 100");
+        }
+        if (schoolName && schoolName.length > 150) {
+            record.addError("schoolName", "School Name exceeds character limit of 150");
+        }
+        if (institutionEmail && institutionEmail.length > 100) {
+            record.addError("institutionEmail", "Institution Email exceeds character limit of 100");
+        }
+        if (addressLine1 && addressLine1.length > 100) {
+            record.addError("addressLine1", "Address Line 1 exceeds character limit of 100");
+        }
+        if (addressLine2 && addressLine2.length > 50) {
+            record.addError("addressLine2", "Address Line 2 exceeds character limit of 50");
+        }
+        if (city && city.length > 50) {
+            record.addError("city", "City exceeds character limit of 50");
+        }
+        if (state && state.length > 50) {
+            record.addError("state", "State exceeds character limit of 50");
+        }
+        if (country && country.length > 100) {
+            record.addError("country", "Country is not recognized");
+        }
+        if (ext && ext.length > 20) {
+            record.addError("ext", "Ext.' must be a number up to 20 digits in length");
+        }
+        if (website && website.length > 500) {
+            record.addError("website", "Website exceeds character limit of 500");
+        }
+        if (note && note.length > 10000) {
+            record.addError("note", "Note exceeds character limit of 10000");
+        }
+        // Date format validations
+        const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+        if (ecfmgIssueDate) {
+            if (!dateRegex.test(ecfmgIssueDate)) {
+                record.addError("ecfmgIssueDate", "ECFMG Issue Date must be formatted as m/d/yyyy");
+            }
+            else {
+                // Validate actual date
+                const [month, day, year] = ecfmgIssueDate.split('/').map(Number);
+                const date = new Date(year, month - 1, day);
+                if (date.getMonth() !== month - 1 || date.getDate() !== day || date.getFullYear() !== year) {
+                    record.addError("ecfmgIssueDate", "ECFMG Issue Date must be formatted as m/d/yyyy");
+                }
+            }
+        }
+        if (fifthPathwayIssueDate) {
+            if (!dateRegex.test(fifthPathwayIssueDate)) {
+                record.addError("fifthPathwayIssueDate", "Fifth Pathway Issue Date must be formatted as m/d/yyyy");
+            }
+            else {
+                // Validate actual date
+                const [month, day, year] = fifthPathwayIssueDate.split('/').map(Number);
+                const date = new Date(year, month - 1, day);
+                if (date.getMonth() !== month - 1 || date.getDate() !== day || date.getFullYear() !== year) {
+                    record.addError("fifthPathwayIssueDate", "Fifth Pathway Issue Date must be formatted as m/d/yyyy");
+                }
+            }
+        }
+        if (startDate) {
+            if (!dateRegex.test(startDate)) {
+                record.addError("startDate", "Start Date must be formatted as m/d/yyyy");
+            }
+            else {
+                // Validate actual date
+                const [month, day, year] = startDate.split('/').map(Number);
+                const date = new Date(year, month - 1, day);
+                if (date.getMonth() !== month - 1 || date.getDate() !== day || date.getFullYear() !== year) {
+                    record.addError("startDate", "Start Date must be formatted as m/d/yyyy");
+                }
+            }
+        }
+        if (endDate) {
+            if (!dateRegex.test(endDate)) {
+                record.addError("endDate", "End Date must be formatted as m/d/yyyy");
+            }
+            else {
+                // Validate actual date
+                const [month, day, year] = endDate.split('/').map(Number);
+                const date = new Date(year, month - 1, day);
+                if (date.getMonth() !== month - 1 || date.getDate() !== day || date.getFullYear() !== year) {
+                    record.addError("endDate", "End Date must be formatted as m/d/yyyy");
+                }
+            }
+        }
+        // Timestamp format validation (m/d/yyyy h:mm:ss)
+        if (timestamp) {
+            const timestampRegex = /^\d{1,2}\/\d{1,2}\/\d{4} \d{1,2}:\d{2}:\d{2}$/;
+            if (!timestampRegex.test(timestamp)) {
+                record.addError("timestamp", "Timestamp must be formatted as m/d/yyyy h:mm:ss");
+            }
+            else {
+                // Validate actual date/time
+                const [datePart, timePart] = timestamp.split(' ');
+                const [month, day, year] = datePart.split('/').map(Number);
+                const [hour, minute, second] = timePart.split(':').map(Number);
+                const date = new Date(year, month - 1, day, hour, minute, second);
+                if (date.getMonth() !== month - 1 || date.getDate() !== day || date.getFullYear() !== year) {
+                    record.addError("timestamp", "Timestamp must be formatted as m/d/yyyy h:mm:ss");
+                }
+            }
+        }
+        // Email validation
+        if (institutionEmail) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(institutionEmail)) {
+                record.addError("institutionEmail", "'Institution Email' is not a valid email address.");
+            }
+        }
+        // Website URL validation
+        if (website) {
+            const urlRegex = /^https?:\/\/[^\s$.?#].[^\s]*$/i;
+            if (!urlRegex.test(website)) {
+                record.addError("website", "Website is not a valid URL");
+            }
+        }
+        // Phone number validation (9, 10, or 12 digits only)
+        if (phone) {
+            const phoneDigits = phone.replace(/\D/g, ''); // Remove all non-digits
+            if (phone !== phoneDigits || ![9, 10, 12].includes(phoneDigits.length)) {
+                record.addError("phone", "Phone Number must be 9, 10, or 12-digit number");
+            }
+        }
+        // Fax number validation (9, 10, or 12 digits only)
+        if (fax) {
+            const faxDigits = fax.replace(/\D/g, ''); // Remove all non-digits
+            if (fax !== faxDigits || ![9, 10, 12].includes(faxDigits.length)) {
+                record.addError("fax", "Fax must be 9, 10, or 12-digit number");
+            }
+        }
+        // Extension validation (must be numeric)
+        if (ext) {
+            const extNumeric = /^\d+$/.test(ext);
+            if (!extNumeric) {
+                record.addError("ext", "Ext.' must be a number up to 20 digits in length");
+            }
+        }
+        // Zip validation (max 10 alphanumeric characters)
+        if (zip) {
+            const zipRegex = /^[a-zA-Z0-9]{1,10}$/;
+            if (!zipRegex.test(zip)) {
+                record.addError("zip", "Zip exceeds 10 characters.");
+            }
+        }
+        // State validation (no non-ASCII characters)
+        if (state) {
+            const asciiRegex = /^[\x00-\x7F]*$/;
+            if (!asciiRegex.test(state)) {
+                record.addError("state", "State not supported");
+            }
+        }
+        // GUID format validation for File Key
+        if (fileKey) {
+            const guidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+            if (!guidRegex.test(fileKey)) {
+                record.addError("fileKey", "File Key must be a valid GUID");
+            }
+        }
+        // User validation warning
+        if (!user?.trim()) {
+            record.addWarning("user", "No User listed, so \"Credentialing System\" will be listed");
+        }
+        return record;
+    }));
+};
+exports.educationValidationHook = educationValidationHook;
+
+
+/***/ }),
+
+/***/ 91780:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.locationValidationHook = void 0;
+const plugin_record_hook_1 = __nccwpck_require__(32095);
+// Validation helper functions
+function isValidUUID(value) {
+    if (!value)
+        return false;
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(value);
+}
+function isValidEmail(email) {
+    if (!email)
+        return true; // Optional field
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+}
+function isValidUrl(url) {
+    if (!url)
+        return true; // Optional field
+    try {
+        const urlObj = new URL(url);
+        return urlObj.protocol === 'https:' && urlObj.hostname.includes('.');
+    }
+    catch {
+        return false;
+    }
+}
+function isValidPhoneNumber(phone) {
+    if (!phone)
+        return true; // Optional field
+    const cleanPhone = phone.replace(/\D/g, '');
+    return [9, 10, 12].includes(cleanPhone.length);
+}
+function isValidZipCode(zip) {
+    if (!zip)
+        return true; // Optional field
+    const cleanZip = zip.replace(/\D/g, '');
+    return [5, 6, 9].includes(cleanZip.length);
+}
+function isValidTimeFormat(time) {
+    if (!time)
+        return true; // Optional field
+    const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+    return timeRegex.test(time);
+}
+function isValidNPI(npi) {
+    if (!npi)
+        return true; // Optional field
+    const cleanNPI = npi.replace(/\D/g, '');
+    return cleanNPI.length === 10;
+}
+function isValidExtension(ext) {
+    if (!ext)
+        return true; // Optional field
+    const cleanExt = ext.replace(/\D/g, '');
+    return cleanExt.length <= 20 && cleanExt === ext;
+}
+function isValidYesNo(value) {
+    if (!value)
+        return true; // Optional field
+    return ['Y', 'N', 'y', 'n'].includes(value);
+}
+function validateCharacterLimit(value, limit, fieldName) {
+    const errors = [];
+    if (value && value.length > limit) {
+        errors.push(`${fieldName} exceeds character limit of ${limit}`);
+    }
+    return errors;
+}
+const locationValidationHook = (listener) => {
+    listener.use((0, plugin_record_hook_1.recordHook)("location", (record) => {
+        const errors = [];
+        const warnings = [];
+        // Extract field values
+        const externalId = record.get("externalId");
+        const externalIdType = record.get("externalIdType");
+        const locationName = record.get("locationName");
+        const dba = record.get("dba");
+        const legalBusinessName = record.get("legalBusinessName");
+        const corporateEntity = record.get("corporateEntity");
+        const taxonomy = record.get("taxonomy");
+        const specialty = record.get("specialty");
+        const locationId = record.get("locationId");
+        const region = record.get("region");
+        const npiNumber = record.get("npiNumber");
+        const taxId = record.get("taxId");
+        const medicareId = record.get("medicareId");
+        const medicaidId = record.get("medicaidId");
+        // Contact Information fields
+        const contactCountry = record.get("contactCountry");
+        const contactAddressLine1 = record.get("contactAddressLine1");
+        const contactAddressLine2 = record.get("contactAddressLine2");
+        const contactCity = record.get("contactCity");
+        const contactCounty = record.get("contactCounty");
+        const contactZip = record.get("contactZip");
+        const contactEmail = record.get("contactEmail");
+        const contactPhoneNumber = record.get("contactPhoneNumber");
+        const contactExt = record.get("contactExt");
+        const contactFax = record.get("contactFax");
+        const website = record.get("website");
+        // Correspondence fields
+        const correspondenceName = record.get("correspondenceName");
+        const correspondenceTitle = record.get("correspondenceTitle");
+        const correspondenceAddressLine1 = record.get("correspondenceAddressLine1");
+        const correspondenceAddressLine2 = record.get("correspondenceAddressLine2");
+        const correspondenceCity = record.get("correspondenceCity");
+        const correspondenceCounty = record.get("correspondenceCounty");
+        const correspondenceZip = record.get("correspondenceZip");
+        const correspondenceEmail = record.get("correspondenceEmail");
+        const correspondencePhoneNumber = record.get("correspondencePhoneNumber");
+        const correspondenceExt = record.get("correspondenceExt");
+        const correspondenceFax = record.get("correspondenceFax");
+        // Operating Hours fields
+        const sundayStartTime = record.get("sundayStartTime");
+        const sundayEndTime = record.get("sundayEndTime");
+        const sundayClosed = record.get("sundayClosed");
+        const mondayStartTime = record.get("mondayStartTime");
+        const mondayEndTime = record.get("mondayEndTime");
+        const mondayClosed = record.get("mondayClosed");
+        const tuesdayStartTime = record.get("tuesdayStartTime");
+        const tuesdayEndTime = record.get("tuesdayEndTime");
+        const tuesdayClosed = record.get("tuesdayClosed");
+        const wednesdayStartTime = record.get("wednesdayStartTime");
+        const wednesdayEndTime = record.get("wednesdayEndTime");
+        const wednesdayClosed = record.get("wednesdayClosed");
+        const thursdayStartTime = record.get("thursdayStartTime");
+        const thursdayEndTime = record.get("thursdayEndTime");
+        const thursdayClosed = record.get("thursdayClosed");
+        const fridayStartTime = record.get("fridayStartTime");
+        const fridayEndTime = record.get("fridayEndTime");
+        const fridayClosed = record.get("fridayClosed");
+        const saturdayStartTime = record.get("saturdayStartTime");
+        const saturdayEndTime = record.get("saturdayEndTime");
+        const saturdayClosed = record.get("saturdayClosed");
+        // Billing Address fields
+        const billingName = record.get("billingName");
+        const billingAddressLine1 = record.get("billingAddressLine1");
+        const billingAddressLine2 = record.get("billingAddressLine2");
+        const billingCity = record.get("billingCity");
+        const billingCounty = record.get("billingCounty");
+        const billingZip = record.get("billingZip");
+        const billingEmail = record.get("billingEmail");
+        const billingPhoneNumber = record.get("billingPhoneNumber");
+        const billingExt = record.get("billingExt");
+        const billingFax = record.get("billingFax");
+        // Additional fields
+        const generalNotes = record.get("generalNotes");
+        const instructions = record.get("instructions");
+        // Boolean Y/N fields
+        const affiliationVerificationAvailable = record.get("affiliationVerificationAvailable");
+        const locationDetailIdsSameAsCorporateEntity = record.get("locationDetailIdsSameAsCorporateEntity");
+        const contactInformationSameAsCorporateEntity = record.get("contactInformationSameAsCorporateEntity");
+        const correspondenceSameAsCorporateEntity = record.get("correspondenceSameAsCorporateEntity");
+        const billingAddressSameAsCorporateEntity = record.get("billingAddressSameAsCorporateEntity");
+        const adaCompliant = record.get("adaCompliant");
+        const examTableScaleChair = record.get("examTableScaleChair");
+        const exteriorBuilding = record.get("exteriorBuilding");
+        const handicapAccessibility = record.get("handicapAccessibility");
+        const interiorBuilding = record.get("interiorBuilding");
+        const parking = record.get("parking");
+        const publicTransportationAccess = record.get("publicTransportationAccess");
+        const restroom = record.get("restroom");
+        const siteAccessibility = record.get("siteAccessibility");
+        const multiLineConferencing = record.get("multiLineConferencing");
+        const interpreterServices = record.get("interpreterServices");
+        // Required field validations
+        if (!externalId) {
+            errors.push("External ID is required");
+        }
+        if (!externalIdType) {
+            errors.push("External ID Type is required");
+        }
+        if (!locationName) {
+            errors.push("Location Name is required");
+        }
+        if (!corporateEntity) {
+            errors.push("Corporate Entity is required");
+        }
+        // External ID Type validation
+        if (externalIdType && !["Location Key", "Location ID"].includes(externalIdType)) {
+            errors.push("External ID Type not valid");
+        }
+        // External ID and External ID Type dependency validation
+        if ((externalId && !externalIdType) || (!externalId && externalIdType)) {
+            errors.push("Must provide both External ID and External ID Type");
+        }
+        // UUID validation for Location Key when adding new records
+        if (externalIdType === "Location Key" && externalId && !isValidUUID(externalId)) {
+            errors.push("Location Key formatted incorrectly");
+        }
+        // Character limit validations
+        errors.push(...validateCharacterLimit(externalId, 36, "External ID"));
+        errors.push(...validateCharacterLimit(locationName, 100, "Location Name"));
+        errors.push(...validateCharacterLimit(dba, 100, "DBA"));
+        errors.push(...validateCharacterLimit(legalBusinessName, 100, "Legal Business Name"));
+        errors.push(...validateCharacterLimit(taxonomy, 100, "Taxonomy"));
+        errors.push(...validateCharacterLimit(specialty, 50, "Specialty"));
+        errors.push(...validateCharacterLimit(region, 50, "Region"));
+        errors.push(...validateCharacterLimit(taxId, 50, "Tax ID"));
+        errors.push(...validateCharacterLimit(medicareId, 50, "Medicare ID"));
+        errors.push(...validateCharacterLimit(medicaidId, 50, "Medicaid ID"));
+        // Contact Information character limits
+        errors.push(...validateCharacterLimit(contactCountry, 100, "Contact Country"));
+        errors.push(...validateCharacterLimit(contactAddressLine1, 100, "Contact Address Line 1"));
+        errors.push(...validateCharacterLimit(contactAddressLine2, 50, "Contact Address Line 2"));
+        errors.push(...validateCharacterLimit(contactCity, 50, "Contact City"));
+        errors.push(...validateCharacterLimit(contactCounty, 100, "Contact County"));
+        // Correspondence character limits
+        errors.push(...validateCharacterLimit(correspondenceName, 100, "Correspondence Name"));
+        errors.push(...validateCharacterLimit(correspondenceTitle, 100, "Correspondence Title"));
+        errors.push(...validateCharacterLimit(correspondenceAddressLine1, 100, "Correspondence Address Line 1"));
+        errors.push(...validateCharacterLimit(correspondenceAddressLine2, 50, "Correspondence Address Line 2"));
+        errors.push(...validateCharacterLimit(correspondenceCity, 50, "Correspondence City"));
+        errors.push(...validateCharacterLimit(correspondenceCounty, 100, "Correspondence County"));
+        // Billing Address character limits
+        errors.push(...validateCharacterLimit(billingName, 100, "Billing Name"));
+        errors.push(...validateCharacterLimit(billingAddressLine1, 100, "Billing Address Line 1"));
+        errors.push(...validateCharacterLimit(billingAddressLine2, 50, "Billing Address Line 2"));
+        errors.push(...validateCharacterLimit(billingCity, 50, "Billing City"));
+        errors.push(...validateCharacterLimit(billingCounty, 100, "Billing County"));
+        // Long text field limits
+        errors.push(...validateCharacterLimit(generalNotes, 10000, "General Notes"));
+        errors.push(...validateCharacterLimit(instructions, 10000, "Instructions"));
+        // Location ID validation (pipe-delimited, max 64 chars each)
+        if (locationId) {
+            const locationIds = locationId.split('|');
+            for (const id of locationIds) {
+                if (id.length > 64) {
+                    errors.push("One of the Location ID's exceeds character limit of 64");
+                    break;
+                }
+            }
+        }
+        // NPI Number validation
+        if (!isValidNPI(npiNumber)) {
+            errors.push("NPI Number must be exactly 10 digits");
+        }
+        // Email validations
+        if (!isValidEmail(contactEmail)) {
+            errors.push("Contact Email not a valid email");
+        }
+        if (!isValidEmail(correspondenceEmail)) {
+            errors.push("Correspondence Email not a valid email");
+        }
+        if (!isValidEmail(billingEmail)) {
+            errors.push("Billing Email not a valid email");
+        }
+        // Phone number validations
+        if (!isValidPhoneNumber(contactPhoneNumber)) {
+            errors.push("Contact Phone Number must be 9, 10, or 12-digit number");
+        }
+        if (!isValidPhoneNumber(contactFax)) {
+            errors.push("Contact Fax must be 9, 10, or 12-digit number");
+        }
+        if (!isValidPhoneNumber(correspondencePhoneNumber)) {
+            errors.push("Correspondence Phone Number must be 9, 10, or 12-digit number");
+        }
+        if (!isValidPhoneNumber(correspondenceFax)) {
+            errors.push("Correspondence Fax must be 9, 10, or 12-digit number");
+        }
+        if (!isValidPhoneNumber(billingPhoneNumber)) {
+            errors.push("Billing Phone Number must be 9, 10, or 12-digit number");
+        }
+        if (!isValidPhoneNumber(billingFax)) {
+            errors.push("Billing Fax must be 9, 10, or 12-digit number");
+        }
+        // Extension validations
+        if (!isValidExtension(contactExt)) {
+            errors.push("Contact Ext. must be a number up to 20 digits in length");
+        }
+        if (!isValidExtension(correspondenceExt)) {
+            errors.push("Correspondence Ext. must be a number up to 20 digits in length");
+        }
+        if (!isValidExtension(billingExt)) {
+            errors.push("Billing Ext. must be a number up to 20 digits in length");
+        }
+        // Zip code validations
+        if (!isValidZipCode(contactZip)) {
+            errors.push("Contact Zip is not 5, 6, or 9 digits");
+        }
+        if (!isValidZipCode(correspondenceZip)) {
+            errors.push("Correspondence Zip is not 5, 6, or 9 digits");
+        }
+        if (!isValidZipCode(billingZip)) {
+            errors.push("Billing Zip is not 5, 6, or 9 digits");
+        }
+        // Website validation
+        if (!isValidUrl(website)) {
+            errors.push("Website not a valid url");
+        }
+        // Time format validations
+        const timeFields = [
+            { value: sundayStartTime, name: "Sunday Start Time" },
+            { value: sundayEndTime, name: "Sunday End Time" },
+            { value: mondayStartTime, name: "Monday Start Time" },
+            { value: mondayEndTime, name: "Monday End Time" },
+            { value: tuesdayStartTime, name: "Tuesday Start Time" },
+            { value: tuesdayEndTime, name: "Tuesday End Time" },
+            { value: wednesdayStartTime, name: "Wednesday Start Time" },
+            { value: wednesdayEndTime, name: "Wednesday End Time" },
+            { value: thursdayStartTime, name: "Thursday Start Time" },
+            { value: thursdayEndTime, name: "Thursday End Time" },
+            { value: fridayStartTime, name: "Friday Start Time" },
+            { value: fridayEndTime, name: "Friday End Time" },
+            { value: saturdayStartTime, name: "Saturday Start Time" },
+            { value: saturdayEndTime, name: "Saturday End Time" }
+        ];
+        for (const timeField of timeFields) {
+            if (!isValidTimeFormat(timeField.value)) {
+                errors.push(`${timeField.name} must be formatted as hh:mm`);
+            }
+        }
+        // Y/N boolean validations
+        const booleanFields = [
+            { value: affiliationVerificationAvailable, name: "Affiliation Verification Available" },
+            { value: locationDetailIdsSameAsCorporateEntity, name: "Location Detail IDs Same as Corporate Entity" },
+            { value: contactInformationSameAsCorporateEntity, name: "Contact Information Same as Corporate Entity" },
+            { value: correspondenceSameAsCorporateEntity, name: "Correspondence Same as Corporate Entity" },
+            { value: billingAddressSameAsCorporateEntity, name: "Billing Address Same as Corporate Entity" },
+            { value: sundayClosed, name: "Sunday Closed" },
+            { value: mondayClosed, name: "Monday Closed" },
+            { value: tuesdayClosed, name: "Tuesday Closed" },
+            { value: wednesdayClosed, name: "Wednesday Closed" },
+            { value: thursdayClosed, name: "Thursday Closed" },
+            { value: fridayClosed, name: "Friday Closed" },
+            { value: saturdayClosed, name: "Saturday Closed" },
+            { value: adaCompliant, name: "ADA Compliant" },
+            { value: examTableScaleChair, name: "Exam Table/Scale/Chair" },
+            { value: exteriorBuilding, name: "Exterior Building" },
+            { value: handicapAccessibility, name: "Handicap Accessibility" },
+            { value: interiorBuilding, name: "Interior Building" },
+            { value: parking, name: "Parking" },
+            { value: publicTransportationAccess, name: "Public Transportation Access" },
+            { value: restroom, name: "Restroom" },
+            { value: siteAccessibility, name: "Site Accessibility" },
+            { value: multiLineConferencing, name: "Multi-Line Conferencing" },
+            { value: interpreterServices, name: "Interpreter Services" }
+        ];
+        for (const boolField of booleanFields) {
+            if (!isValidYesNo(boolField.value)) {
+                errors.push(`${boolField.name} must be Y or N`);
+            }
+        }
+        // Apply errors to record
+        for (const error of errors) {
+            record.addError("*", error);
+        }
+        // Apply warnings to record
+        for (const warning of warnings) {
+            record.addWarning("*", warning);
+        }
+        return record;
+    }));
+};
+exports.locationValidationHook = locationValidationHook;
+
+
+/***/ }),
+
 /***/ 79783:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
@@ -170229,6 +175195,712 @@ exports.otherCertificationValidationHook = otherCertificationValidationHook;
 
 /***/ }),
 
+/***/ 67390:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.payerLocationsValidationHook = void 0;
+const plugin_record_hook_1 = __nccwpck_require__(32095);
+const payerLocationsValidationHook = (listener) => {
+    listener.use((0, plugin_record_hook_1.recordHook)("payer-locations", (record) => {
+        // Get field values
+        const payerName = record.get("payer_name");
+        const payerKey = record.get("payer_key");
+        const locationName = record.get("location_name");
+        const locationKey = record.get("location_key");
+        // GUID format regex: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX (8-4-4-4-12)
+        const guidRegex = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/i;
+        // Required field validations
+        if (!payerKey?.trim()) {
+            record.addError("payer_key", "Payer Key required");
+        }
+        if (!locationKey?.trim()) {
+            record.addError("location_key", "Location Key required");
+        }
+        // Payer Key GUID format validation
+        if (payerKey?.trim()) {
+            if (!guidRegex.test(payerKey.trim())) {
+                record.addError("payer_key", "Payer Key must be a valid GUID");
+            }
+        }
+        // Location Key GUID format validation
+        if (locationKey?.trim()) {
+            // Handle comma-delimited multiple location keys
+            const locationKeys = locationKey.split(',').map(key => key.trim());
+            for (const key of locationKeys) {
+                if (key && !guidRegex.test(key)) {
+                    record.addError("location_key", "Location Keys must be a valid GUID. Multiple Keys must be comma-delimited.");
+                    break;
+                }
+            }
+        }
+        // Business logic validations would go here:
+        // - Check if Payer Key matches existing payer in company
+        // - Check if Location Key matches existing location in company  
+        // - Check for existing payer-location relationships
+        // - Check for archived payers/locations
+        // - Check for duplicate payer/location combinations in file
+        // Note: These would require API calls to check against existing data
+        // and are typically handled in the batch action rather than record hook
+        // for performance reasons. Adding placeholders for reference:
+        // TODO: Implement in batch action:
+        // - "No matching payer found" validation
+        // - "No matching location found" validation  
+        // - "Existing Payer-Location relationship identified" validation
+        // - "Duplicate Payer and Location Key combination found" validation
+        // - Archived payer/location warnings
+        return record;
+    }));
+};
+exports.payerLocationsValidationHook = payerLocationsValidationHook;
+
+
+/***/ }),
+
+/***/ 20764:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.payerValidationHook = void 0;
+const plugin_record_hook_1 = __nccwpck_require__(32095);
+const payerValidationHook = (listener) => {
+    listener.use((0, plugin_record_hook_1.recordHook)("payer", (record) => {
+        // Get all field values
+        const payerKey = record.get("payer_key");
+        const payerName = record.get("payer_name");
+        const planLineOfBusiness = record.get("plan_line_of_business");
+        const states = record.get("states");
+        const website = record.get("website");
+        const primaryContactName = record.get("primary_contact_name");
+        const primaryContactEmail = record.get("primary_contact_email");
+        const primaryContactPhone = record.get("primary_contact_phone");
+        const primaryContactPhoneExt = record.get("primary_contact_phone_ext");
+        const primaryContactFax = record.get("primary_contact_fax");
+        const secondaryContactName = record.get("secondary_contact_name");
+        const secondaryContactEmail = record.get("secondary_contact_email");
+        const secondaryContactPhone = record.get("secondary_contact_phone");
+        const secondaryContactPhoneExt = record.get("secondary_contact_phone_ext");
+        const secondaryContactFax = record.get("secondary_contact_fax");
+        const generalNotes = record.get("general_notes");
+        const instructions = record.get("instructions");
+        const lineOfBusinessNotes = record.get("line_of_business_notes");
+        const locationKeys = record.get("location_keys");
+        // Required field validation
+        if (!payerName?.trim()) {
+            record.addError("payer_name", "Payer Name required");
+        }
+        // Character limit validations
+        if (payerName && payerName.length > 100) {
+            record.addError("payer_name", "Payer Name exceeds character limit of 100.");
+        }
+        if (planLineOfBusiness && planLineOfBusiness.length > 100) {
+            record.addError("plan_line_of_business", "Plan/Line of Business exceeds character limit of 100.");
+        }
+        if (website && website.length > 2047) {
+            record.addError("website", "Website exceeds character limit of 2047");
+        }
+        if (primaryContactName && primaryContactName.length > 50) {
+            record.addError("primary_contact_name", "Primary Contact Name exceeds character limit of 50.");
+        }
+        if (primaryContactEmail && primaryContactEmail.length > 100) {
+            record.addError("primary_contact_email", "Primary Contact Email exceeds character limit of 100.");
+        }
+        if (secondaryContactName && secondaryContactName.length > 50) {
+            record.addError("secondary_contact_name", "Secondary Contact Name exceeds character limit of 50.");
+        }
+        if (secondaryContactEmail && secondaryContactEmail.length > 100) {
+            record.addError("secondary_contact_email", "Secondary Contact Email exceeds character limit of 100.");
+        }
+        if (generalNotes && generalNotes.length > 10000) {
+            record.addError("general_notes", "General Notes exceeds character limit of 10000.");
+        }
+        if (instructions && instructions.length > 10000) {
+            record.addError("instructions", "Instructions exceeds character limit of 10000.");
+        }
+        if (lineOfBusinessNotes && lineOfBusinessNotes.length > 10000) {
+            record.addError("line_of_business_notes", "Line of Business Notes exceeds character limit of 10000.");
+        }
+        // Email format validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (primaryContactEmail?.trim() && !emailRegex.test(primaryContactEmail.trim())) {
+            record.addError("primary_contact_email", "Primary Contact Email is not a valid email.");
+        }
+        if (secondaryContactEmail?.trim() && !emailRegex.test(secondaryContactEmail.trim())) {
+            record.addError("secondary_contact_email", "Secondary Contact Email is not a valid email.");
+        }
+        // Phone number validation (9, 10, or 12 digits only)
+        const phoneRegex = /^[0-9]{9}$|^[0-9]{10}$|^[0-9]{12}$/;
+        if (primaryContactPhone?.trim() && !phoneRegex.test(primaryContactPhone.trim())) {
+            record.addError("primary_contact_phone", "Primary Contact Phone must be 9, 10, or 12-digit number");
+        }
+        if (primaryContactFax?.trim() && !phoneRegex.test(primaryContactFax.trim())) {
+            record.addError("primary_contact_fax", "Primary Contact Fax must be 9, 10, or 12-digit number");
+        }
+        if (secondaryContactPhone?.trim() && !phoneRegex.test(secondaryContactPhone.trim())) {
+            record.addError("secondary_contact_phone", "Secondary Contact Phone must be 9, 10, or 12-digit number");
+        }
+        if (secondaryContactFax?.trim() && !phoneRegex.test(secondaryContactFax.trim())) {
+            record.addError("secondary_contact_fax", "Secondary Contact Fax must be 9, 10, or 12-digit number");
+        }
+        // Phone extension validation (number up to 20 digits)
+        const extensionRegex = /^[0-9]{1,20}$/;
+        if (primaryContactPhoneExt?.trim() && !extensionRegex.test(primaryContactPhoneExt.trim())) {
+            record.addError("primary_contact_phone_ext", "Primary Contact Phone Ext.' must be a number up to 20 digits in length");
+        }
+        if (secondaryContactPhoneExt?.trim() && !extensionRegex.test(secondaryContactPhoneExt.trim())) {
+            record.addError("secondary_contact_phone_ext", "Secondary Contact Phone Ext.' must be a number up to 20 digits in length");
+        }
+        // URL validation
+        if (website?.trim()) {
+            try {
+                new URL(website.trim());
+            }
+            catch {
+                record.addError("website", "URL not valid");
+            }
+        }
+        // GUID validation for location keys
+        const guidRegex = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/i;
+        if (locationKeys?.trim()) {
+            const keys = locationKeys.split(',').map(key => key.trim());
+            for (const key of keys) {
+                if (key && !guidRegex.test(key)) {
+                    record.addError("location_keys", "Location Key must be a valid GUID. Multiple Keys must be comma-delimited.");
+                    break;
+                }
+            }
+        }
+        // State validation would require a predefined list of valid states
+        // TODO: Implement state dropdown validation
+        // if (states?.trim()) {
+        //   const stateList = states.split(',').map(state => state.trim());
+        //   const validStates = ['AL', 'AK', 'AZ', ...]; // Full list needed
+        //   const invalidStates = stateList.filter(state => !validStates.includes(state));
+        //   if (invalidStates.length > 0) {
+        //     record.addError("states", `State value(s) [${invalidStates.join(', ')}] not supported`);
+        //   }
+        // }
+        return record;
+    }));
+};
+exports.payerValidationHook = payerValidationHook;
+
+
+/***/ }),
+
+/***/ 15613:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.providerAppointmentDatesValidationHook = void 0;
+const plugin_record_hook_1 = __nccwpck_require__(32095);
+const providerAppointmentDatesValidationHook = (listener) => {
+    listener.use((0, plugin_record_hook_1.recordHook)("provider-appointment-dates", (record) => {
+        // Get all field values
+        const externalId = record.get("externalId");
+        const externalIdType = record.get("externalIdType");
+        const locationKey = record.get("locationKey");
+        const workflowType = record.get("workflowType");
+        const workflowKey = record.get("workflowKey");
+        const resolution = record.get("resolution");
+        const locationEmploymentType = record.get("locationEmploymentType");
+        const appointmentDate = record.get("appointmentDate");
+        const reappointmentDate = record.get("reappointmentDate");
+        const reappointmentNotificationDate = record.get("reappointmentNotificationDate");
+        const inactiveDate = record.get("inactiveDate");
+        const notes = record.get("notes");
+        const providerCategory = record.get("providerCategory");
+        // Required field validations
+        if (!locationKey?.trim()) {
+            record.addError("locationKey", "Location Key required");
+        }
+        if (!workflowType?.trim()) {
+            record.addError("workflowType", "Workflow Type required");
+        }
+        if (!workflowKey?.trim()) {
+            record.addError("workflowKey", "Workflow Key required");
+        }
+        if (!externalId?.trim()) {
+            record.addError("externalId", "External Id required");
+        }
+        if (!externalIdType?.trim()) {
+            record.addError("externalIdType", "External Id Type required");
+        }
+        // External ID validation - both must be provided together
+        if ((externalId && !externalIdType) || (!externalId && externalIdType)) {
+            record.addError("externalId", "Must provide both External ID and External ID Type");
+            record.addError("externalIdType", "Must provide both External ID and External ID Type");
+        }
+        // External ID Type validation
+        const validExternalIdTypes = ["NPI", "InternalID", "ProviderID", "EmrID", "BillingSystemID"];
+        if (externalIdType && !validExternalIdTypes.includes(externalIdType)) {
+            record.addError("externalIdType", "External ID Type not valid");
+        }
+        // GUID format validation for Location Key
+        if (locationKey) {
+            const guidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+            if (!guidRegex.test(locationKey)) {
+                record.addError("locationKey", "Location Key must be a valid GUID");
+            }
+        }
+        // GUID format validation for Workflow Key
+        if (workflowKey) {
+            const guidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+            if (!guidRegex.test(workflowKey)) {
+                record.addError("workflowKey", "Workflow Key must be a valid GUID");
+            }
+        }
+        // Workflow Type validation
+        const validWorkflowTypes = ["Appointment", "Provider - Location Termination"];
+        if (workflowType && !validWorkflowTypes.includes(workflowType)) {
+            record.addError("workflowType", "Workflow Type not supported");
+        }
+        // Resolution validation based on Workflow Type
+        if (workflowType === "Appointment") {
+            if (!resolution?.trim()) {
+                record.addError("resolution", "Resolution required");
+            }
+            else {
+                const validResolutions = ["Approved", "Withdrawn", "Denied", "Approved - Historical Only"];
+                if (!validResolutions.includes(resolution)) {
+                    record.addError("resolution", "Resolution not supported");
+                }
+            }
+        }
+        else if (workflowType === "Provider - Location Termination") {
+            if (resolution?.trim()) {
+                record.addError("resolution", "Resolution can only be input if Workflow Type is Appointment");
+            }
+        }
+        // Date format validations
+        const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+        if (appointmentDate) {
+            if (!dateRegex.test(appointmentDate)) {
+                record.addError("appointmentDate", "Appointment Date must be formatted as m/d/yyyy");
+            }
+            else {
+                // Validate actual date
+                const [month, day, year] = appointmentDate.split('/').map(Number);
+                const date = new Date(year, month - 1, day);
+                if (date.getMonth() !== month - 1 || date.getDate() !== day || date.getFullYear() !== year) {
+                    record.addError("appointmentDate", "Appointment Date must be formatted as m/d/yyyy");
+                }
+            }
+            // Appointment Date can only be input if Resolution is Approved
+            if (resolution !== "Approved") {
+                record.addError("appointmentDate", "Appointment Date can only be input if Resolution is Approved");
+            }
+        }
+        if (reappointmentDate) {
+            if (!dateRegex.test(reappointmentDate)) {
+                record.addError("reappointmentDate", "Reappointment Date must be formatted as m/d/yyyy");
+            }
+            else {
+                // Validate actual date
+                const [month, day, year] = reappointmentDate.split('/').map(Number);
+                const date = new Date(year, month - 1, day);
+                if (date.getMonth() !== month - 1 || date.getDate() !== day || date.getFullYear() !== year) {
+                    record.addError("reappointmentDate", "Reappointment Date must be formatted as m/d/yyyy");
+                }
+            }
+            // Reappointment Date can only be input if Resolution is Approved
+            if (resolution !== "Approved") {
+                record.addError("reappointmentDate", "Reappointment Date can only be input if Resolution is Approved");
+            }
+            // Reappointment Date can only be input if Workflow Type is Appointment
+            if (workflowType !== "Appointment") {
+                record.addError("reappointmentDate", "Reappointment Date can only be input if Workflow Type is Appointment");
+            }
+        }
+        if (reappointmentNotificationDate) {
+            if (!dateRegex.test(reappointmentNotificationDate)) {
+                record.addError("reappointmentNotificationDate", "Notification Date must be formatted as m/d/yyyy");
+            }
+            else {
+                // Validate actual date
+                const [month, day, year] = reappointmentNotificationDate.split('/').map(Number);
+                const date = new Date(year, month - 1, day);
+                if (date.getMonth() !== month - 1 || date.getDate() !== day || date.getFullYear() !== year) {
+                    record.addError("reappointmentNotificationDate", "Notification Date must be formatted as m/d/yyyy");
+                }
+            }
+        }
+        if (inactiveDate) {
+            if (!dateRegex.test(inactiveDate)) {
+                record.addError("inactiveDate", "Inactive Date must be formatted as m/d/yyyy");
+            }
+            else {
+                // Validate actual date
+                const [month, day, year] = inactiveDate.split('/').map(Number);
+                const date = new Date(year, month - 1, day);
+                if (date.getMonth() !== month - 1 || date.getDate() !== day || date.getFullYear() !== year) {
+                    record.addError("inactiveDate", "Inactive Date must be formatted as m/d/yyyy");
+                }
+            }
+            // Inactive Date can only be input if Workflow Type is "Provider - Location Termination"
+            if (workflowType !== "Provider - Location Termination") {
+                record.addError("inactiveDate", "Inactive Date can only be input if Workflow Type is \"Provider - Location Termination\"");
+            }
+        }
+        // Date relationship validations
+        if (appointmentDate && reappointmentDate) {
+            const appointmentDateObj = new Date(appointmentDate);
+            const reappointmentDateObj = new Date(reappointmentDate);
+            if (reappointmentDateObj <= appointmentDateObj) {
+                record.addError("reappointmentDate", "Reappointment Date must be after Appointment Date");
+            }
+        }
+        if (reappointmentNotificationDate && reappointmentDate) {
+            const notificationDateObj = new Date(reappointmentNotificationDate);
+            const reappointmentDateObj = new Date(reappointmentDate);
+            if (notificationDateObj >= reappointmentDateObj) {
+                record.addError("reappointmentNotificationDate", "Notification Date must be before Reappointment Date");
+            }
+            // Check if notification date is 1-999 days before reappointment date
+            const timeDiff = reappointmentDateObj.getTime() - notificationDateObj.getTime();
+            const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+            if (daysDiff < 1 || daysDiff > 999) {
+                record.addError("reappointmentNotificationDate", "Notification Date must be between 1 and 999 days before Reappointment Date");
+            }
+        }
+        // Required appointments and reappointments when Resolution = Approved
+        if (resolution === "Approved") {
+            if (!appointmentDate?.trim()) {
+                record.addError("appointmentDate", "Appointment Date required when Resolution is Approved");
+            }
+            if (!reappointmentDate?.trim()) {
+                record.addError("reappointmentDate", "Reappointment Date required when Resolution is Approved");
+            }
+        }
+        // Required Inactive Date when Workflow Type = "Provider - Location Termination"
+        if (workflowType === "Provider - Location Termination") {
+            if (!inactiveDate?.trim()) {
+                record.addError("inactiveDate", "Inactive Date required when Workflow Type is \"Provider - Location Termination\"");
+            }
+        }
+        // Notes validation
+        if (resolution === "Denied") {
+            if (!notes?.trim()) {
+                record.addError("notes", "Notes required when Resolution is Denied");
+            }
+        }
+        if (notes && notes.length > 500) {
+            record.addError("notes", "Notes must be 500 characters or less");
+        }
+        // Location Employment Type warning
+        if (locationEmploymentType && workflowType !== "Appointment") {
+            record.addWarning("locationEmploymentType", "Location Employment Type will not import information when Workflow Type is not Appointment");
+        }
+        return record;
+    }));
+};
+exports.providerAppointmentDatesValidationHook = providerAppointmentDatesValidationHook;
+
+
+/***/ }),
+
+/***/ 97447:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.providerLocationDetailsValidationHook = void 0;
+const plugin_record_hook_1 = __nccwpck_require__(32095);
+const providerLocationDetailsValidationHook = (listener) => {
+    listener.use((0, plugin_record_hook_1.recordHook)("provider-location-details", (record) => {
+        // Get all field values
+        const externalId = record.get("externalId");
+        const externalIdType = record.get("externalIdType");
+        const locationKey = record.get("locationKey");
+        const placementDate = record.get("placementDate");
+        const taxonomy = record.get("taxonomy");
+        const contractStart = record.get("contractStart");
+        const contractedHours = record.get("contractedHours");
+        const expectedStartDate = record.get("expectedStartDate");
+        const credentialingOverride = record.get("credentialingOverride");
+        const endDate = record.get("endDate");
+        const pendingDate = record.get("pendingDate");
+        const firstShift = record.get("firstShift");
+        const lastShift = record.get("lastShift");
+        const seesPatients = record.get("seesPatients");
+        const providerLocationArchived = record.get("providerLocationArchived");
+        const acceptingNewPatients = record.get("acceptingNewPatients");
+        const pcpOrSpecialist = record.get("pcpOrSpecialist");
+        const payerDirectory = record.get("payerDirectory");
+        const virtualCare = record.get("virtualCare");
+        const telephonicCare = record.get("telephonicCare");
+        const remoteMonitoring = record.get("remoteMonitoring");
+        const minAgeSeen = record.get("minAgeSeen");
+        const maxAgeSeen = record.get("maxAgeSeen");
+        const membershipCapacity = record.get("membershipCapacity");
+        // Required field validations
+        if (!externalId?.trim()) {
+            record.addError("externalId", "External ID is required");
+        }
+        if (!externalIdType?.trim()) {
+            record.addError("externalIdType", "External ID Type is required");
+        }
+        if (!locationKey?.trim()) {
+            record.addError("locationKey", "Location Key is required");
+        }
+        // External ID Type validation - must be one of specific values
+        if (externalIdType?.trim() && !["NPI", "InternalID", "ProviderID", "EmrID", "BillingSystemID"].includes(externalIdType)) {
+            record.addError("externalIdType", "External ID Type must be NPI, InternalID, ProviderID, EmrID, or BillingSystemID");
+        }
+        // External ID and External ID Type dependency validation
+        if ((externalId?.trim() && !externalIdType?.trim()) || (!externalId?.trim() && externalIdType?.trim())) {
+            record.addError("externalId", "Must provide both External ID and External ID Type");
+            record.addError("externalIdType", "Must provide both External ID and External ID Type");
+        }
+        // Location Key GUID format validation
+        if (locationKey?.trim()) {
+            const guidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+            if (!guidRegex.test(locationKey)) {
+                record.addError("locationKey", "Location Key must be a valid GUID format (XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)");
+            }
+        }
+        // Date format validation helper function
+        const validateDate = (dateValue, fieldName, fieldLabel) => {
+            if (dateValue?.trim()) {
+                // Basic date format validation - Flatfile will handle detailed date parsing
+                // Check for obviously invalid formats
+                const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+                if (!dateRegex.test(dateValue)) {
+                    record.addError(fieldName, `${fieldLabel} must be formatted as m/d/yyyy`);
+                }
+                else {
+                    // Additional validation for invalid dates like 2/31/2023
+                    const [month, day, year] = dateValue.split('/').map(Number);
+                    const date = new Date(year, month - 1, day);
+                    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+                        record.addError(fieldName, `${fieldLabel} must be a valid date`);
+                    }
+                }
+            }
+        };
+        // Date field validations
+        validateDate(placementDate, "placementDate", "Placement Date");
+        validateDate(contractStart, "contractStart", "Contract Start");
+        validateDate(expectedStartDate, "expectedStartDate", "Expected Start Date");
+        validateDate(endDate, "endDate", "End Date");
+        validateDate(pendingDate, "pendingDate", "Pending Date");
+        validateDate(firstShift, "firstShift", "First Shift");
+        validateDate(lastShift, "lastShift", "Last Shift");
+        // Credentialing Override conditional validations
+        if (credentialingOverride?.trim()) {
+            if (!["End Date", "Pending", "None", ""].includes(credentialingOverride)) {
+                record.addError("credentialingOverride", "Credentialing Override must be 'End Date', 'Pending', 'None', or blank");
+            }
+            // End Date required if Credentialing Override = "End Date"
+            if (credentialingOverride === "End Date" && !endDate?.trim()) {
+                record.addError("endDate", "End Date is required when Credentialing Override is 'End Date'");
+            }
+            // Pending Date required if Credentialing Override = "Pending"
+            if (credentialingOverride === "Pending" && !pendingDate?.trim()) {
+                record.addError("pendingDate", "Pending Date is required when Credentialing Override is 'Pending'");
+            }
+        }
+        // Character limit validations
+        if (taxonomy && taxonomy.length > 100) {
+            record.addError("taxonomy", "Taxonomy exceeds character limit of 100");
+        }
+        if (contractedHours && contractedHours.length > 10) {
+            record.addError("contractedHours", "Contracted Hours exceeds character limit of 10");
+        }
+        if (minAgeSeen && minAgeSeen.length > 120) {
+            record.addError("minAgeSeen", "Min Age Seen exceeds character limit of 120");
+        }
+        if (maxAgeSeen && maxAgeSeen.length > 120) {
+            record.addError("maxAgeSeen", "Max Age Seen exceeds character limit of 120");
+        }
+        if (membershipCapacity && membershipCapacity.length > 4) {
+            record.addError("membershipCapacity", "Membership Capacity exceeds character limit of 9999");
+        }
+        // Y/N field validations
+        const validateYesNo = (value, fieldName, fieldLabel) => {
+            if (value?.trim() && !["Y", "N", ""].includes(value)) {
+                record.addError(fieldName, `${fieldLabel} must be Y or N`);
+            }
+        };
+        validateYesNo(seesPatients, "seesPatients", "Sees Patients?");
+        validateYesNo(providerLocationArchived, "providerLocationArchived", "Provider Location Archived?");
+        validateYesNo(acceptingNewPatients, "acceptingNewPatients", "Accepting New Patients");
+        validateYesNo(payerDirectory, "payerDirectory", "Payer Directory");
+        validateYesNo(virtualCare, "virtualCare", "Virtual Care");
+        validateYesNo(telephonicCare, "telephonicCare", "Telephonic Care");
+        validateYesNo(remoteMonitoring, "remoteMonitoring", "Remote Monitoring");
+        // PCP or Specialist validation
+        if (pcpOrSpecialist?.trim() && !["", "PCP", "Specialist"].includes(pcpOrSpecialist)) {
+            record.addError("pcpOrSpecialist", "PCP/Specialist must be 'Blank', 'PCP' or 'Specialist'");
+        }
+        // User Defined Field validations (X1-X10)
+        const validateUDF = (fieldValue, fieldName) => {
+            if (fieldValue && fieldValue.length > 50) {
+                record.addError(fieldName, `${fieldName.toUpperCase()} exceeds character limit of 50`);
+            }
+        };
+        // Validate all X1-X10 fields
+        for (let i = 1; i <= 10; i++) {
+            const fieldName = `x${i}`;
+            const fieldValue = record.get(fieldName);
+            validateUDF(fieldValue, fieldName);
+        }
+        // Handle "None" values - clear fields if they contain "None" (case-insensitive)
+        const clearNoneValues = (value, fieldName) => {
+            if (value?.toLowerCase() === "none") {
+                record.set(fieldName, "");
+            }
+        };
+        // Apply "None" clearing to relevant fields
+        clearNoneValues(taxonomy, "taxonomy");
+        clearNoneValues(contractedHours, "contractedHours");
+        clearNoneValues(minAgeSeen, "minAgeSeen");
+        clearNoneValues(maxAgeSeen, "maxAgeSeen");
+        clearNoneValues(membershipCapacity, "membershipCapacity");
+        // Clear "None" values in UDF fields
+        for (let i = 1; i <= 10; i++) {
+            const fieldName = `x${i}`;
+            const fieldValue = record.get(fieldName);
+            clearNoneValues(fieldValue, fieldName);
+        }
+        return record;
+    }));
+};
+exports.providerLocationDetailsValidationHook = providerLocationDetailsValidationHook;
+
+
+/***/ }),
+
+/***/ 42595:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.providerPayerEnrollmentDatesValidationHook = void 0;
+const plugin_record_hook_1 = __nccwpck_require__(32095);
+const providerPayerEnrollmentDatesValidationHook = (listener) => {
+    listener.use((0, plugin_record_hook_1.recordHook)("provider-payer-enrollment-dates", (record) => {
+        // Get all field values
+        const externalId = record.get("externalId");
+        const externalIdType = record.get("externalIdType");
+        const locationKey = record.get("locationKey");
+        const payerKey = record.get("payerKey");
+        const workflowKey = record.get("workflowKey");
+        const resolution = record.get("resolution");
+        const effectiveDate = record.get("effectiveDate");
+        const reEnrollmentDate = record.get("reEnrollmentDate");
+        const payerProviderId = record.get("payerProviderId");
+        // Required field validations
+        if (!externalId?.trim()) {
+            record.addError("externalId", "External ID is required");
+        }
+        if (!externalIdType?.trim()) {
+            record.addError("externalIdType", "External ID Type is required");
+        }
+        if (!locationKey?.trim()) {
+            record.addError("locationKey", "Location Key is required");
+        }
+        if (!payerKey?.trim()) {
+            record.addError("payerKey", "Payer Key is required");
+        }
+        if (!workflowKey?.trim()) {
+            record.addError("workflowKey", "Workflow Key is required");
+        }
+        if (!resolution?.trim()) {
+            record.addError("resolution", "Resolution is required");
+        }
+        // External ID Type validation - must be one of specific values
+        if (externalIdType?.trim() && !["NPI", "InternalID", "ProviderID", "EmrID", "BillingSystemID"].includes(externalIdType)) {
+            record.addError("externalIdType", "External ID Type must be NPI, InternalID, ProviderID, EmrID, or BillingSystemID");
+        }
+        // External ID and External ID Type dependency validation
+        if ((externalId?.trim() && !externalIdType?.trim()) || (!externalId?.trim() && externalIdType?.trim())) {
+            record.addError("externalId", "Must provide both External ID and External ID Type");
+            record.addError("externalIdType", "Must provide both External ID and External ID Type");
+        }
+        // GUID format validation helper function
+        const validateGUID = (guidValue, fieldName, fieldLabel) => {
+            if (guidValue?.trim()) {
+                const guidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+                if (!guidRegex.test(guidValue)) {
+                    record.addError(fieldName, `${fieldLabel} must be a valid GUID format (XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)`);
+                }
+            }
+        };
+        // GUID field validations
+        validateGUID(locationKey, "locationKey", "Location Key");
+        validateGUID(payerKey, "payerKey", "Payer Key");
+        validateGUID(workflowKey, "workflowKey", "Workflow Key");
+        // Resolution validation
+        if (resolution?.trim()) {
+            const validResolutions = ["Approved", "Participating", "Rejected", "Denied", "Withdrawn", "Non-Participating", "Non-Billing", "Terminated"];
+            if (!validResolutions.includes(resolution)) {
+                record.addError("resolution", "Resolution must be Approved, Participating, Rejected, Denied, Withdrawn, Non-Participating, Non-Billing, or Terminated");
+            }
+        }
+        // Date format validation helper function
+        const validateDate = (dateValue, fieldName, fieldLabel) => {
+            if (dateValue?.trim()) {
+                // Basic date format validation - Flatfile will handle detailed date parsing
+                const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+                if (!dateRegex.test(dateValue)) {
+                    record.addError(fieldName, `${fieldLabel} must be formatted as m/d/yyyy`);
+                    return null;
+                }
+                else {
+                    // Additional validation for invalid dates like 2/31/2023
+                    const [month, day, year] = dateValue.split('/').map(Number);
+                    const date = new Date(year, month - 1, day);
+                    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+                        record.addError(fieldName, `${fieldLabel} must be a valid date`);
+                        return null;
+                    }
+                    return date;
+                }
+            }
+            return null;
+        };
+        // Date field validations
+        const effectiveDateObj = validateDate(effectiveDate, "effectiveDate", "Effective Date");
+        const reEnrollmentDateObj = validateDate(reEnrollmentDate, "reEnrollmentDate", "Re-Enrollment Date");
+        // Resolution-dependent date validations
+        if (resolution?.trim()) {
+            const approvedParticipatingResolutions = ["Approved", "Participating"];
+            // Effective Date can only be input if Resolution is Approved or Participating
+            if (effectiveDate?.trim() && !approvedParticipatingResolutions.includes(resolution)) {
+                record.addError("effectiveDate", "Effective Date can only be input if Resolution is Approved or Participating");
+            }
+            // Re-Enrollment Date can only be input if Resolution is Approved or Participating
+            if (reEnrollmentDate?.trim() && !approvedParticipatingResolutions.includes(resolution)) {
+                record.addError("reEnrollmentDate", "Re-enrollment Date can only be input if Resolution is Approved or Participating");
+            }
+        }
+        // Re-Enrollment Date must be after Effective Date
+        if (effectiveDateObj && reEnrollmentDateObj) {
+            if (reEnrollmentDateObj <= effectiveDateObj) {
+                record.addError("reEnrollmentDate", "Re-enrollment Date must be after Effective Date");
+            }
+        }
+        // Payer Provider ID character limit validation
+        if (payerProviderId && payerProviderId.length > 50) {
+            record.addError("payerProviderId", "Payer Provider ID exceeds character limit of 50");
+        }
+        return record;
+    }));
+};
+exports.providerPayerEnrollmentDatesValidationHook = providerPayerEnrollmentDatesValidationHook;
+
+
+/***/ }),
+
 /***/ 11680:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
@@ -170407,6 +176079,15 @@ const affiliation_sheet_1 = __nccwpck_require__(14066);
 const other_certification_sheet_1 = __nccwpck_require__(45459);
 const malpractice_insurance_sheet_1 = __nccwpck_require__(99403);
 const education_gap_sheet_1 = __nccwpck_require__(23519);
+const payer_locations_sheet_1 = __nccwpck_require__(71789);
+const payer_sheet_1 = __nccwpck_require__(26705);
+const cds_certificate_sheet_1 = __nccwpck_require__(70915);
+const cme_sheet_1 = __nccwpck_require__(70078);
+const education_sheet_1 = __nccwpck_require__(76933);
+const provider_appointment_dates_sheet_1 = __nccwpck_require__(1232);
+const provider_location_details_sheet_1 = __nccwpck_require__(82499);
+const provider_payer_enrollment_dates_sheet_1 = __nccwpck_require__(45177);
+const location_sheet_1 = __nccwpck_require__(73186);
 // Generate field mappings from all sheet configurations
 function generateFieldMappings() {
     const sheets = [
@@ -170419,7 +176100,16 @@ function generateFieldMappings() {
         affiliation_sheet_1.affiliationSheet,
         other_certification_sheet_1.otherCertificationSheet,
         malpractice_insurance_sheet_1.malpracticeInsuranceSheet,
-        education_gap_sheet_1.educationGapSheet
+        education_gap_sheet_1.educationGapSheet,
+        payer_locations_sheet_1.payerLocationsSheet,
+        payer_sheet_1.payerSheet,
+        cds_certificate_sheet_1.cdsCertificateSheet,
+        cme_sheet_1.cmeSheet,
+        education_sheet_1.educationSheet,
+        provider_appointment_dates_sheet_1.providerAppointmentDatesSheet,
+        provider_location_details_sheet_1.providerLocationDetailsSheet,
+        provider_payer_enrollment_dates_sheet_1.providerPayerEnrollmentDatesSheet,
+        location_sheet_1.locationSheet
     ];
     const mappings = {};
     sheets.forEach(sheet => {
