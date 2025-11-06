@@ -1,0 +1,4 @@
+Provider Name,External ID,External ID Type,Reason,Start Date,End Date,Explanation,Record Viewable by Provider,File Viewable by Provider,File Key
+Dr. John Smith,12345,NPI,Medical Leave,1/15/2023,3/30/2023,Took time off for medical procedure recovery,T,T,12345678-1234-1234-1234-123456789012
+Dr. Jane Doe,67890,Provider ID,Sabbatical,6/1/2023,12/31/2023,Academic research sabbatical at partner institution,T,F,
+Dr. Bob Johnson,11111,NPI,Personal Leave,9/1/2022,9/15/2022,Family emergency requiring time away,F,F,98765432-4321-4321-4321-210987654321

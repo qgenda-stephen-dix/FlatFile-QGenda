@@ -7,6 +7,7 @@ import { deaLicenseSheet } from "../blueprints/sheets/dea-license.sheet";
 import { affiliationSheet } from "../blueprints/sheets/affiliation.sheet";
 import { otherCertificationSheet } from "../blueprints/sheets/other-certification.sheet";
 import { malpracticeInsuranceSheet } from "../blueprints/sheets/malpractice-insurance.sheet";
+import { educationGapSheet } from "../blueprints/sheets/education-gap.sheet";
 
 // Generate field mappings from all sheet configurations
 export function generateFieldMappings(): { [key: string]: string } {
@@ -19,7 +20,8 @@ export function generateFieldMappings(): { [key: string]: string } {
     deaLicenseSheet,
     affiliationSheet,
     otherCertificationSheet,
-    malpracticeInsuranceSheet
+    malpracticeInsuranceSheet,
+    educationGapSheet
   ];
 
   const mappings: { [key: string]: string } = {};

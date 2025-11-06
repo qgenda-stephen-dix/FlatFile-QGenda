@@ -164211,6 +164211,62 @@ if(typeof window !== 'undefined' && !window.XLSX) try { window.XLSX = XLSX; } ca
 
 /***/ }),
 
+/***/ 88118:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.malpracticeDeduplicationAction = void 0;
+/**
+ * Malpractice Insurance Deduplication Action
+ * Focused implementation for just malpractice insurance records
+ */
+const malpracticeDeduplicationAction = (listener) => {
+    listener.on("job:ready", { job: "dedupeMalpracticeInsurance" }, async ({ context: { jobId, sheetId }, ...event }) => {
+        try {
+            console.log("Starting malpractice insurance deduplication...");
+            const { data: records } = await event.data;
+            console.log(`Processing ${records.length} malpractice insurance records for deduplication...`);
+            // Key: external_id + external_id_type + carrier_name + policy_number
+            const duplicateMap = new Map();
+            for (const record of records) {
+                const externalId = record.get("externalId");
+                const externalIdType = record.get("externalIdType");
+                const carrierName = record.get("carrierName");
+                const policyNumber = record.get("policyNumber");
+                if (externalId && externalIdType && carrierName && policyNumber) {
+                    const key = `${externalId.toLowerCase()}|${externalIdType.toLowerCase()}|${carrierName.toLowerCase()}|${policyNumber.toLowerCase()}`;
+                    if (!duplicateMap.has(key)) {
+                        duplicateMap.set(key, []);
+                    }
+                    duplicateMap.get(key).push(record);
+                }
+            }
+            let duplicateCount = 0;
+            for (const [key, duplicateRecords] of duplicateMap.entries()) {
+                if (duplicateRecords.length > 1) {
+                    // Flag all duplicates after the first
+                    for (let i = 1; i < duplicateRecords.length; i++) {
+                        duplicateRecords[i].addError("carrierName", `Duplicate malpractice insurance record found. A policy with this carrier and number already exists for this provider.`);
+                        duplicateCount++;
+                    }
+                    duplicateRecords[0].addInfo("carrierName", `Duplicate insurance records found and flagged. Keeping first occurrence of ${duplicateRecords.length} records.`);
+                }
+            }
+            console.log(`Malpractice insurance deduplication completed. Found and flagged ${duplicateCount} duplicate records.`);
+        }
+        catch (error) {
+            console.error("Error in malpractice insurance deduplication:", error);
+            throw new Error("Malpractice insurance deduplication failed. Please try again.");
+        }
+    });
+};
+exports.malpracticeDeduplicationAction = malpracticeDeduplicationAction;
+
+
+/***/ }),
+
 /***/ 57644:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
@@ -164312,6 +164368,130 @@ exports.validateDEALicenseAction = (0, plugin_job_handler_1.jobHandler)("sheet:v
         };
     }
 });
+
+
+/***/ }),
+
+/***/ 56345:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.validateEducationGapAction = void 0;
+/**
+ * Validate Education Gap Action
+ * CRED-34567
+ *
+ * Comprehensive batch validation for education gap imports including:
+ * - Required field validation
+ * - Character limits
+ * - Date formats and business rules
+ * - GUID validation
+ * - Cross-field validation for viewability settings
+ */
+const validateEducationGapAction = (listener) => {
+    listener.on("job:ready", { job: "sheet:validateEducationGap" }, async ({ context: { jobId, sheetId }, ...event }) => {
+        try {
+            const { data: records } = await event.data;
+            const validatedRecords = records.map((record) => {
+                // Get field values
+                const externalId = record.get('external_id');
+                const externalIdType = record.get('external_id_type');
+                const reason = record.get('reason');
+                const startDate = record.get('start_date');
+                const endDate = record.get('end_date');
+                const explanation = record.get('explanation');
+                const recordViewable = record.get('record_viewable_by_provider');
+                const fileViewable = record.get('file_viewable_by_provider');
+                const fileKey = record.get('file_key');
+                // Required field validations
+                if (!externalId?.trim()) {
+                    record.addError('external_id', 'External Id required');
+                }
+                if (!externalIdType?.trim()) {
+                    record.addError('external_id_type', 'External Id Type required');
+                }
+                if (!startDate) {
+                    record.addError('start_date', 'Start Date is required');
+                }
+                if (!endDate) {
+                    record.addError('end_date', 'End Date is required');
+                }
+                // Character limit validations
+                if (reason && reason.length > 200) {
+                    record.addError('reason', 'Reason exceeds character limit of 200');
+                }
+                if (explanation && explanation.length > 1000) {
+                    record.addError('explanation', 'Explanation exceeds character limit of 1000');
+                }
+                // Date format validations
+                if (startDate) {
+                    const datePattern = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+                    if (!datePattern.test(startDate)) {
+                        record.addError('start_date', 'Start Date must be formatted as m/d/yyyy');
+                    }
+                    else {
+                        const [month, day, year] = startDate.split('/').map(Number);
+                        const date = new Date(year, month - 1, day);
+                        if (date.getFullYear() !== year ||
+                            date.getMonth() !== month - 1 ||
+                            date.getDate() !== day) {
+                            record.addError('start_date', 'Start Date must be formatted as m/d/yyyy');
+                        }
+                    }
+                }
+                if (endDate) {
+                    const datePattern = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+                    if (!datePattern.test(endDate)) {
+                        record.addError('end_date', 'End Date must be formatted as m/d/yyyy');
+                    }
+                    else {
+                        const [month, day, year] = endDate.split('/').map(Number);
+                        const date = new Date(year, month - 1, day);
+                        if (date.getFullYear() !== year ||
+                            date.getMonth() !== month - 1 ||
+                            date.getDate() !== day) {
+                            record.addError('end_date', 'End Date must be formatted as m/d/yyyy');
+                        }
+                    }
+                }
+                // Viewability field validations
+                if (recordViewable && recordViewable !== '' && recordViewable !== 'T' && recordViewable !== 'F') {
+                    record.addError('record_viewable_by_provider', 'Record Viewable by Provider must be T or F');
+                }
+                if (fileViewable && fileViewable !== '' && fileViewable !== 'T' && fileViewable !== 'F') {
+                    record.addError('file_viewable_by_provider', 'File Viewable by Provider must be T or F');
+                }
+                // Cross-validation for viewability
+                const recordViewableProvided = recordViewable && recordViewable !== '';
+                const fileViewableProvided = fileViewable && fileViewable !== '';
+                if (recordViewableProvided !== fileViewableProvided) {
+                    record.addError('record_viewable_by_provider', 'If one of Record Viewable by Provider or File Viewable by Provider are imported, the other must also be imported');
+                    record.addError('file_viewable_by_provider', 'If one of Record Viewable by Provider or File Viewable by Provider are imported, the other must also be imported');
+                }
+                // Warning for viewability mismatch
+                if (recordViewable === 'F' && fileViewable === 'T') {
+                    record.addWarning('file_viewable_by_provider', "File Viewable by Provider must be set to 'F' on records where Record Viewable by Provider is set to 'F'");
+                }
+                // File Key GUID validation
+                if (fileKey && fileKey.trim()) {
+                    const guidPattern = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+                    if (!guidPattern.test(fileKey.trim())) {
+                        record.addError('file_key', 'File Key must be a valid GUID');
+                    }
+                }
+                return record;
+            });
+            console.log(`Education Gap validation completed for ${validatedRecords.length} records`);
+        }
+        catch (error) {
+            console.error('Error in education gap validation:', error);
+            throw error;
+        }
+    });
+};
+exports.validateEducationGapAction = validateEducationGapAction;
 
 
 /***/ }),
@@ -165065,6 +165245,67 @@ exports.affiliationSheet = {
             key: "timestamp",
             type: "date",
             label: "TimeStamp"
+        },
+        // Standard X1-X10 Custom Fields
+        {
+            key: 'x1',
+            type: 'string',
+            label: 'X1',
+            description: 'Custom field 1 for extensibility'
+        },
+        {
+            key: 'x2',
+            type: 'string',
+            label: 'X2',
+            description: 'Custom field 2 for extensibility'
+        },
+        {
+            key: 'x3',
+            type: 'string',
+            label: 'X3',
+            description: 'Custom field 3 for extensibility'
+        },
+        {
+            key: 'x4',
+            type: 'string',
+            label: 'X4',
+            description: 'Custom field 4 for extensibility'
+        },
+        {
+            key: 'x5',
+            type: 'string',
+            label: 'X5',
+            description: 'Custom field 5 for extensibility'
+        },
+        {
+            key: 'x6',
+            type: 'string',
+            label: 'X6',
+            description: 'Custom field 6 for extensibility'
+        },
+        {
+            key: 'x7',
+            type: 'string',
+            label: 'X7',
+            description: 'Custom field 7 for extensibility'
+        },
+        {
+            key: 'x8',
+            type: 'string',
+            label: 'X8',
+            description: 'Custom field 8 for extensibility'
+        },
+        {
+            key: 'x9',
+            type: 'string',
+            label: 'X9',
+            description: 'Custom field 9 for extensibility'
+        },
+        {
+            key: 'x10',
+            type: 'string',
+            label: 'X10',
+            description: 'Custom field 10 for extensibility'
         }
     ],
     actions: [
@@ -165073,6 +165314,12 @@ exports.affiliationSheet = {
             mode: "foreground",
             label: "Validate Affiliation Data",
             description: "Validate affiliation records against business rules"
+        },
+        {
+            operation: "dedupeAffiliation",
+            mode: "foreground",
+            label: "Remove Duplicate Affiliations",
+            description: "Identify and flag duplicate affiliation records based on provider, facility, and date"
         }
     ]
 };
@@ -165368,6 +165615,67 @@ exports.boardCertificationSheet = {
             type: "date",
             label: "TimeStamp",
             description: "Format m/d/yyyy"
+        },
+        // Standard X1-X10 Custom Fields
+        {
+            key: 'x1',
+            type: 'string',
+            label: 'X1',
+            description: 'Custom field 1 for extensibility'
+        },
+        {
+            key: 'x2',
+            type: 'string',
+            label: 'X2',
+            description: 'Custom field 2 for extensibility'
+        },
+        {
+            key: 'x3',
+            type: 'string',
+            label: 'X3',
+            description: 'Custom field 3 for extensibility'
+        },
+        {
+            key: 'x4',
+            type: 'string',
+            label: 'X4',
+            description: 'Custom field 4 for extensibility'
+        },
+        {
+            key: 'x5',
+            type: 'string',
+            label: 'X5',
+            description: 'Custom field 5 for extensibility'
+        },
+        {
+            key: 'x6',
+            type: 'string',
+            label: 'X6',
+            description: 'Custom field 6 for extensibility'
+        },
+        {
+            key: 'x7',
+            type: 'string',
+            label: 'X7',
+            description: 'Custom field 7 for extensibility'
+        },
+        {
+            key: 'x8',
+            type: 'string',
+            label: 'X8',
+            description: 'Custom field 8 for extensibility'
+        },
+        {
+            key: 'x9',
+            type: 'string',
+            label: 'X9',
+            description: 'Custom field 9 for extensibility'
+        },
+        {
+            key: 'x10',
+            type: 'string',
+            label: 'X10',
+            description: 'Custom field 10 for extensibility'
         },
         {
             key: "board_certification_preference",
@@ -165699,6 +166007,12 @@ exports.deaLicenseSheet = {
             mode: "foreground",
             label: "Validate DEA License",
             description: "Comprehensive validation of DEA License information per specification"
+        },
+        {
+            operation: "dedupeDEALicense",
+            mode: "foreground",
+            label: "Remove Duplicate DEA Licenses",
+            description: "Identify and flag duplicate DEA license records for the same provider"
         }
     ]
 };
@@ -165729,6 +166043,67 @@ exports.demographicReferenceSheet = {
             type: "string",
             label: "Demographic Name",
             constraints: [{ type: "required" }]
+        },
+        // Standard X1-X10 Custom Fields
+        {
+            key: 'x1',
+            type: 'string',
+            label: 'X1',
+            description: 'Custom field 1 for extensibility'
+        },
+        {
+            key: 'x2',
+            type: 'string',
+            label: 'X2',
+            description: 'Custom field 2 for extensibility'
+        },
+        {
+            key: 'x3',
+            type: 'string',
+            label: 'X3',
+            description: 'Custom field 3 for extensibility'
+        },
+        {
+            key: 'x4',
+            type: 'string',
+            label: 'X4',
+            description: 'Custom field 4 for extensibility'
+        },
+        {
+            key: 'x5',
+            type: 'string',
+            label: 'X5',
+            description: 'Custom field 5 for extensibility'
+        },
+        {
+            key: 'x6',
+            type: 'string',
+            label: 'X6',
+            description: 'Custom field 6 for extensibility'
+        },
+        {
+            key: 'x7',
+            type: 'string',
+            label: 'X7',
+            description: 'Custom field 7 for extensibility'
+        },
+        {
+            key: 'x8',
+            type: 'string',
+            label: 'X8',
+            description: 'Custom field 8 for extensibility'
+        },
+        {
+            key: 'x9',
+            type: 'string',
+            label: 'X9',
+            description: 'Custom field 9 for extensibility'
+        },
+        {
+            key: 'x10',
+            type: 'string',
+            label: 'X10',
+            description: 'Custom field 10 for extensibility'
         }
     ],
     actions: [
@@ -166331,6 +166706,67 @@ exports.demographicV2Sheet = {
                     { value: "No", label: "No" }
                 ]
             }
+        },
+        // Standard X1-X10 Custom Fields
+        {
+            key: 'x1',
+            type: 'string',
+            label: 'X1',
+            description: 'Custom field 1 for extensibility'
+        },
+        {
+            key: 'x2',
+            type: 'string',
+            label: 'X2',
+            description: 'Custom field 2 for extensibility'
+        },
+        {
+            key: 'x3',
+            type: 'string',
+            label: 'X3',
+            description: 'Custom field 3 for extensibility'
+        },
+        {
+            key: 'x4',
+            type: 'string',
+            label: 'X4',
+            description: 'Custom field 4 for extensibility'
+        },
+        {
+            key: 'x5',
+            type: 'string',
+            label: 'X5',
+            description: 'Custom field 5 for extensibility'
+        },
+        {
+            key: 'x6',
+            type: 'string',
+            label: 'X6',
+            description: 'Custom field 6 for extensibility'
+        },
+        {
+            key: 'x7',
+            type: 'string',
+            label: 'X7',
+            description: 'Custom field 7 for extensibility'
+        },
+        {
+            key: 'x8',
+            type: 'string',
+            label: 'X8',
+            description: 'Custom field 8 for extensibility'
+        },
+        {
+            key: 'x9',
+            type: 'string',
+            label: 'X9',
+            description: 'Custom field 9 for extensibility'
+        },
+        {
+            key: 'x10',
+            type: 'string',
+            label: 'X10',
+            description: 'Custom field 10 for extensibility'
         }
     ],
     actions: [
@@ -166862,6 +167298,67 @@ exports.demographicSheet = {
             key: "primary_credentialing_specialist_email",
             type: "string",
             label: "Primary Credentialing Specialist Email"
+        },
+        // Standard X1-X10 Custom Fields
+        {
+            key: 'x1',
+            type: 'string',
+            label: 'X1',
+            description: 'Custom field 1 for extensibility'
+        },
+        {
+            key: 'x2',
+            type: 'string',
+            label: 'X2',
+            description: 'Custom field 2 for extensibility'
+        },
+        {
+            key: 'x3',
+            type: 'string',
+            label: 'X3',
+            description: 'Custom field 3 for extensibility'
+        },
+        {
+            key: 'x4',
+            type: 'string',
+            label: 'X4',
+            description: 'Custom field 4 for extensibility'
+        },
+        {
+            key: 'x5',
+            type: 'string',
+            label: 'X5',
+            description: 'Custom field 5 for extensibility'
+        },
+        {
+            key: 'x6',
+            type: 'string',
+            label: 'X6',
+            description: 'Custom field 6 for extensibility'
+        },
+        {
+            key: 'x7',
+            type: 'string',
+            label: 'X7',
+            description: 'Custom field 7 for extensibility'
+        },
+        {
+            key: 'x8',
+            type: 'string',
+            label: 'X8',
+            description: 'Custom field 8 for extensibility'
+        },
+        {
+            key: 'x9',
+            type: 'string',
+            label: 'X9',
+            description: 'Custom field 9 for extensibility'
+        },
+        {
+            key: 'x10',
+            type: 'string',
+            label: 'X10',
+            description: 'Custom field 10 for extensibility'
         }
     ],
     actions: [
@@ -166870,6 +167367,206 @@ exports.demographicSheet = {
             mode: "foreground",
             label: "Validate Provider",
             description: "Validate provider demographic information"
+        }
+    ]
+};
+
+
+/***/ }),
+
+/***/ 23519:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.educationGapSheet = void 0;
+/**
+ * Education Gap Sheet Blueprint
+ * CRED-34567
+ *
+ * Tracks education gaps/time off periods for providers with:
+ * - Required external ID and date fields
+ * - File linking capability with GUID validation
+ * - Provider and file viewability controls
+ * - Character limits and format validations
+ */
+exports.educationGapSheet = {
+    name: "Education Gap",
+    slug: "education-gap",
+    access: ["*"],
+    fields: [
+        // Key Fields
+        {
+            key: "provider_name",
+            type: "string",
+            label: "Provider Name",
+            description: "Dummy column for reference only"
+        },
+        {
+            key: "external_id",
+            type: "string",
+            label: "External ID",
+            description: "Key field for updating, Required field",
+            constraints: [
+                { type: "required" }
+            ]
+        },
+        {
+            key: "external_id_type",
+            type: "string",
+            label: "External ID Type",
+            description: "Key field for updating, Required field",
+            constraints: [
+                { type: "required" }
+            ]
+        },
+        // Education Gap Details
+        {
+            key: "reason",
+            type: "string",
+            label: "Reason",
+            description: "Max 200 characters"
+        },
+        {
+            key: "start_date",
+            type: "date",
+            label: "Start Date",
+            description: "Key field for updating. Format: m/d/yyyy",
+            constraints: [
+                { type: "required" }
+            ]
+        },
+        {
+            key: "end_date",
+            type: "date",
+            label: "End Date",
+            description: "Key field for updating. Format: m/d/yyyy",
+            constraints: [
+                { type: "required" }
+            ]
+        },
+        {
+            key: "explanation",
+            type: "string",
+            label: "Explanation",
+            description: "Max 1000 characters"
+        },
+        // Viewability Controls
+        {
+            key: "record_viewable_by_provider",
+            type: "enum",
+            label: "Record Viewable by Provider",
+            description: "Must be T or F if provided",
+            config: {
+                options: [
+                    { value: "T", label: "T" },
+                    { value: "F", label: "F" },
+                    { value: "", label: "" }
+                ]
+            }
+        },
+        {
+            key: "file_viewable_by_provider",
+            type: "enum",
+            label: "File Viewable by Provider",
+            description: "Must be T or F if provided",
+            config: {
+                options: [
+                    { value: "T", label: "T" },
+                    { value: "F", label: "F" },
+                    { value: "", label: "" }
+                ]
+            }
+        },
+        // File Linking
+        {
+            key: "file_key",
+            type: "string",
+            label: "File Key",
+            description: "GUID format: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+        },
+        // Standard System Fields
+        {
+            key: "user",
+            type: "string",
+            label: "User",
+            description: "User who created/modified the record"
+        },
+        {
+            key: "timestamp",
+            type: "date",
+            label: "TimeStamp",
+            description: "Timestamp in m/d/yyyy format"
+        },
+        // Standard X1-X10 Custom Fields
+        {
+            key: "x1",
+            type: "string",
+            label: "X1",
+            description: "Custom field 1 for extensibility"
+        },
+        {
+            key: "x2",
+            type: "string",
+            label: "X2",
+            description: "Custom field 2 for extensibility"
+        },
+        {
+            key: "x3",
+            type: "string",
+            label: "X3",
+            description: "Custom field 3 for extensibility"
+        },
+        {
+            key: "x4",
+            type: "string",
+            label: "X4",
+            description: "Custom field 4 for extensibility"
+        },
+        {
+            key: "x5",
+            type: "string",
+            label: "X5",
+            description: "Custom field 5 for extensibility"
+        },
+        {
+            key: "x6",
+            type: "string",
+            label: "X6",
+            description: "Custom field 6 for extensibility"
+        },
+        {
+            key: "x7",
+            type: "string",
+            label: "X7",
+            description: "Custom field 7 for extensibility"
+        },
+        {
+            key: "x8",
+            type: "string",
+            label: "X8",
+            description: "Custom field 8 for extensibility"
+        },
+        {
+            key: "x9",
+            type: "string",
+            label: "X9",
+            description: "Custom field 9 for extensibility"
+        },
+        {
+            key: "x10",
+            type: "string",
+            label: "X10",
+            description: "Custom field 10 for extensibility"
+        }
+    ],
+    actions: [
+        {
+            operation: "validateEducationGap",
+            mode: "foreground",
+            label: "Validate Education Gap Data",
+            description: "Validate education gap records with comprehensive business rules"
         }
     ]
 };
@@ -167270,6 +167967,12 @@ exports.malpracticeInsuranceSheet = {
             mode: 'background',
             label: 'Validate Malpractice Insurance',
             description: 'Validates malpractice insurance records with comprehensive business rules'
+        },
+        {
+            operation: 'dedupeMalpracticeInsurance',
+            mode: 'foreground',
+            label: 'Remove Duplicate Insurance Records',
+            description: 'Identify and flag duplicate malpractice insurance records for the same provider, carrier, and policy'
         }
     ]
 };
@@ -167517,6 +168220,12 @@ exports.otherCertificationSheet = {
             mode: "foreground",
             label: "Validate Other Certification",
             description: "Validate other certification data with comprehensive business rules"
+        },
+        {
+            operation: "dedupeOtherCertification",
+            mode: "foreground",
+            label: "Remove Duplicate Certifications",
+            description: "Identify and flag duplicate certification records for the same provider and certification type"
         }
     ]
 };
@@ -167738,6 +168447,67 @@ exports.stateLicenseSheet = {
             type: "date",
             label: "TimeStamp",
             description: "Format m/d/yyyy"
+        },
+        // Standard X1-X10 Custom Fields
+        {
+            key: 'x1',
+            type: 'string',
+            label: 'X1',
+            description: 'Custom field 1 for extensibility'
+        },
+        {
+            key: 'x2',
+            type: 'string',
+            label: 'X2',
+            description: 'Custom field 2 for extensibility'
+        },
+        {
+            key: 'x3',
+            type: 'string',
+            label: 'X3',
+            description: 'Custom field 3 for extensibility'
+        },
+        {
+            key: 'x4',
+            type: 'string',
+            label: 'X4',
+            description: 'Custom field 4 for extensibility'
+        },
+        {
+            key: 'x5',
+            type: 'string',
+            label: 'X5',
+            description: 'Custom field 5 for extensibility'
+        },
+        {
+            key: 'x6',
+            type: 'string',
+            label: 'X6',
+            description: 'Custom field 6 for extensibility'
+        },
+        {
+            key: 'x7',
+            type: 'string',
+            label: 'X7',
+            description: 'Custom field 7 for extensibility'
+        },
+        {
+            key: 'x8',
+            type: 'string',
+            label: 'X8',
+            description: 'Custom field 8 for extensibility'
+        },
+        {
+            key: 'x9',
+            type: 'string',
+            label: 'X9',
+            description: 'Custom field 9 for extensibility'
+        },
+        {
+            key: 'x10',
+            type: 'string',
+            label: 'X10',
+            description: 'Custom field 10 for extensibility'
         }
     ],
     actions: [
@@ -167746,6 +168516,12 @@ exports.stateLicenseSheet = {
             mode: "foreground",
             label: "Validate State License Data",
             description: "Validate state license records against business rules"
+        },
+        {
+            operation: "dedupeStateLicense",
+            mode: "foreground",
+            label: "Remove Duplicate State Licenses",
+            description: "Identify and flag duplicate state license records for the same provider and state"
         }
     ]
 };
@@ -167775,6 +168551,67 @@ exports.usersSheet = {
             type: "string",
             label: "Name2_AUTO_UPDATE_TEST_SUCCESS",
         },
+        // Standard X1-X10 Custom Fields
+        {
+            key: 'x1',
+            type: 'string',
+            label: 'X1',
+            description: 'Custom field 1 for extensibility'
+        },
+        {
+            key: 'x2',
+            type: 'string',
+            label: 'X2',
+            description: 'Custom field 2 for extensibility'
+        },
+        {
+            key: 'x3',
+            type: 'string',
+            label: 'X3',
+            description: 'Custom field 3 for extensibility'
+        },
+        {
+            key: 'x4',
+            type: 'string',
+            label: 'X4',
+            description: 'Custom field 4 for extensibility'
+        },
+        {
+            key: 'x5',
+            type: 'string',
+            label: 'X5',
+            description: 'Custom field 5 for extensibility'
+        },
+        {
+            key: 'x6',
+            type: 'string',
+            label: 'X6',
+            description: 'Custom field 6 for extensibility'
+        },
+        {
+            key: 'x7',
+            type: 'string',
+            label: 'X7',
+            description: 'Custom field 7 for extensibility'
+        },
+        {
+            key: 'x8',
+            type: 'string',
+            label: 'X8',
+            description: 'Custom field 8 for extensibility'
+        },
+        {
+            key: 'x9',
+            type: 'string',
+            label: 'X9',
+            description: 'Custom field 9 for extensibility'
+        },
+        {
+            key: 'x10',
+            type: 'string',
+            label: 'X10',
+            description: 'Custom field 10 for extensibility'
+        },
     ],
     actions: [reverse_name_action_1.reverseNameAction],
 };
@@ -167799,11 +168636,12 @@ const affiliation_sheet_1 = __nccwpck_require__(14066);
 const board_certification_sheet_1 = __nccwpck_require__(71303);
 const other_certification_sheet_1 = __nccwpck_require__(45459);
 const malpractice_insurance_sheet_1 = __nccwpck_require__(99403);
+const education_gap_sheet_1 = __nccwpck_require__(23519);
 exports.companyWorkbook = {
     name: "Company Workbook",
     namespace: "workbook:qgenda-company",
     labels: ["pinned"],
-    sheets: [users_sheet_1.usersSheet, demographic_sheet_1.demographicSheet, demographic_v2_sheet_1.demographicV2Sheet, demographic_reference_sheet_1.demographicReferenceSheet, state_license_sheet_1.stateLicenseSheet, dea_license_sheet_1.deaLicenseSheet, affiliation_sheet_1.affiliationSheet, board_certification_sheet_1.boardCertificationSheet, other_certification_sheet_1.otherCertificationSheet, malpractice_insurance_sheet_1.malpracticeInsuranceSheet],
+    sheets: [users_sheet_1.usersSheet, demographic_sheet_1.demographicSheet, demographic_v2_sheet_1.demographicV2Sheet, demographic_reference_sheet_1.demographicReferenceSheet, state_license_sheet_1.stateLicenseSheet, dea_license_sheet_1.deaLicenseSheet, affiliation_sheet_1.affiliationSheet, board_certification_sheet_1.boardCertificationSheet, other_certification_sheet_1.otherCertificationSheet, malpractice_insurance_sheet_1.malpracticeInsuranceSheet, education_gap_sheet_1.educationGapSheet],
     actions: [{
             operation: "downloadWorkbook",
             mode: "foreground",
@@ -167847,6 +168685,9 @@ const validate_malpractice_insurance_action_1 = __nccwpck_require__(38797);
 const rollout_plugin_1 = __nccwpck_require__(25100);
 const field_mappings_1 = __nccwpck_require__(87931);
 const debug_spaces_listener_1 = __nccwpck_require__(40807);
+const malpractice_deduplication_action_1 = __nccwpck_require__(88118);
+const education_gap_validation_listener_1 = __nccwpck_require__(40078);
+const validate_education_gap_action_1 = __nccwpck_require__(56345);
 function default_1(listener) {
     // Generate field mappings dynamically from sheet configurations
     const fieldMappings = (0, field_mappings_1.generateFieldMappings)();
@@ -167876,7 +168717,11 @@ function default_1(listener) {
     listener.use(validate_other_certification_action_1.validateOtherCertificationAction);
     listener.use(malpractice_insurance_validation_listener_1.default);
     listener.use(validate_malpractice_insurance_action_1.validateMalpracticeInsuranceAction);
+    listener.use(education_gap_validation_listener_1.educationGapValidationHook);
+    listener.use(validate_education_gap_action_1.validateEducationGapAction);
     listener.use(debug_spaces_listener_1.debugSpacesListener); // Add debug listener
+    // Add malpractice insurance deduplication action
+    (0, malpractice_deduplication_action_1.malpracticeDeduplicationAction)(listener);
     // Register the rollout plugin root handler for agent deployment events
     listener.use(rollout_plugin_1.rolloutPlugin.root);
     // Register the rollout plugin on namespaced listener for job handling
@@ -168148,7 +168993,7 @@ exports.spaceConfig = (0, plugin_space_configure_1.configureSpace)({
     space: {
         namespace: "qgenda-company", // Set the space namespace explicitly
         metadata: {
-            version: "2.2.0", // Increment this to force existing space updates
+            version: "2.3.0", // Increment this to force existing space updates
             theme: {
                 root: {
                     primaryColor: "#4A90E2", // Soft blue as primary color
@@ -168928,6 +169773,125 @@ exports.demographicValidationHook = (0, plugin_record_hook_1.recordHook)('demogr
 
 /***/ }),
 
+/***/ 40078:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.educationGapValidationHook = void 0;
+const plugin_record_hook_1 = __nccwpck_require__(32095);
+/**
+ * Education Gap Validation Listener
+ * CRED-34567
+ *
+ * Validates education gap records including:
+ * - Required fields (external_id, external_id_type, start_date, end_date)
+ * - Character limits (reason: 200, explanation: 1000)
+ * - Date format validation (m/d/yyyy)
+ * - Viewability field cross-validation
+ * - GUID format validation for file_key
+ */
+const educationGapValidationHook = (listener) => {
+    listener.use((0, plugin_record_hook_1.recordHook)("education-gap", (record) => {
+        // Get all field values
+        const externalId = record.get("external_id");
+        const externalIdType = record.get("external_id_type");
+        const reason = record.get("reason");
+        const startDate = record.get("start_date");
+        const endDate = record.get("end_date");
+        const explanation = record.get("explanation");
+        const recordViewable = record.get("record_viewable_by_provider");
+        const fileViewable = record.get("file_viewable_by_provider");
+        const fileKey = record.get("file_key");
+        // ===== REQUIRED FIELD VALIDATIONS =====
+        if (!externalId?.trim()) {
+            record.addError("external_id", "External Id required");
+        }
+        if (!externalIdType?.trim()) {
+            record.addError("external_id_type", "External Id Type required");
+        }
+        if (!startDate) {
+            record.addError("start_date", "Start Date is required");
+        }
+        if (!endDate) {
+            record.addError("end_date", "End Date is required");
+        }
+        // ===== CHARACTER LIMIT VALIDATIONS =====
+        if (reason && reason.length > 200) {
+            record.addError("reason", "Reason exceeds character limit of 200");
+        }
+        if (explanation && explanation.length > 1000) {
+            record.addError("explanation", "Explanation exceeds character limit of 1000");
+        }
+        // ===== DATE FORMAT VALIDATIONS =====
+        if (startDate) {
+            const datePattern = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+            if (!datePattern.test(startDate)) {
+                record.addError("start_date", "Start Date must be formatted as m/d/yyyy");
+            }
+            else {
+                // Validate it's a real date
+                const [month, day, year] = startDate.split('/').map(Number);
+                const date = new Date(year, month - 1, day);
+                if (date.getFullYear() !== year ||
+                    date.getMonth() !== month - 1 ||
+                    date.getDate() !== day) {
+                    record.addError("start_date", "Start Date must be formatted as m/d/yyyy");
+                }
+            }
+        }
+        if (endDate) {
+            const datePattern = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+            if (!datePattern.test(endDate)) {
+                record.addError("end_date", "End Date must be formatted as m/d/yyyy");
+            }
+            else {
+                // Validate it's a real date
+                const [month, day, year] = endDate.split('/').map(Number);
+                const date = new Date(year, month - 1, day);
+                if (date.getFullYear() !== year ||
+                    date.getMonth() !== month - 1 ||
+                    date.getDate() !== day) {
+                    record.addError("end_date", "End Date must be formatted as m/d/yyyy");
+                }
+            }
+        }
+        // ===== VIEWABILITY FIELD VALIDATIONS =====
+        // Validate enum values (T or F only if provided)
+        if (recordViewable && recordViewable !== "" && recordViewable !== "T" && recordViewable !== "F") {
+            record.addError("record_viewable_by_provider", "Record Viewable by Provider must be T or F");
+        }
+        if (fileViewable && fileViewable !== "" && fileViewable !== "T" && fileViewable !== "F") {
+            record.addError("file_viewable_by_provider", "File Viewable by Provider must be T or F");
+        }
+        // Cross-validation: if one viewability field is provided, both must be provided
+        const recordViewableProvided = recordViewable && recordViewable !== "";
+        const fileViewableProvided = fileViewable && fileViewable !== "";
+        if (recordViewableProvided !== fileViewableProvided) {
+            record.addError("record_viewable_by_provider", "If one of Record Viewable by Provider or File Viewable by Provider are imported, the other must also be imported");
+            record.addError("file_viewable_by_provider", "If one of Record Viewable by Provider or File Viewable by Provider are imported, the other must also be imported");
+        }
+        // Warning: File Viewable should be F when Record Viewable is F
+        if (recordViewable === "F" && fileViewable === "T") {
+            record.addWarning("file_viewable_by_provider", "File Viewable by Provider must be set to 'F' on records where Record Viewable by Provider is set to 'F'");
+        }
+        // ===== FILE KEY GUID VALIDATION =====
+        if (fileKey && fileKey.trim()) {
+            // GUID format: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX (8-4-4-4-12)
+            const guidPattern = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+            if (!guidPattern.test(fileKey.trim())) {
+                record.addError("file_key", "File Key must be a valid GUID");
+            }
+        }
+        return record;
+    }));
+};
+exports.educationGapValidationHook = educationGapValidationHook;
+
+
+/***/ }),
+
 /***/ 79783:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
@@ -169442,6 +170406,7 @@ const dea_license_sheet_1 = __nccwpck_require__(37019);
 const affiliation_sheet_1 = __nccwpck_require__(14066);
 const other_certification_sheet_1 = __nccwpck_require__(45459);
 const malpractice_insurance_sheet_1 = __nccwpck_require__(99403);
+const education_gap_sheet_1 = __nccwpck_require__(23519);
 // Generate field mappings from all sheet configurations
 function generateFieldMappings() {
     const sheets = [
@@ -169453,7 +170418,8 @@ function generateFieldMappings() {
         dea_license_sheet_1.deaLicenseSheet,
         affiliation_sheet_1.affiliationSheet,
         other_certification_sheet_1.otherCertificationSheet,
-        malpractice_insurance_sheet_1.malpracticeInsuranceSheet
+        malpractice_insurance_sheet_1.malpracticeInsuranceSheet,
+        education_gap_sheet_1.educationGapSheet
     ];
     const mappings = {};
     sheets.forEach(sheet => {

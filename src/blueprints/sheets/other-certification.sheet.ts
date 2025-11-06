@@ -233,6 +233,12 @@ export const otherCertificationSheet: Flatfile.SheetConfig = {
       mode: "foreground",
       label: "Validate Other Certification",
       description: "Validate other certification data with comprehensive business rules"
+    },
+    {
+      operation: "dedupeOtherCertification",
+      mode: "foreground",
+      label: "Remove Duplicate Certifications",
+      description: "Identify and flag duplicate certification records for the same provider and certification type"
     }
   ]
 };

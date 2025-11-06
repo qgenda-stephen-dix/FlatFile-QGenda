@@ -6,7 +6,7 @@ export const spaceConfig = configureSpace({
     space: {
       namespace: "qgenda-company",  // Set the space namespace explicitly
       metadata: {
-        version: "2.2.0",  // Increment this to force existing space updates
+        version: "2.3.0",  // Increment this to force existing space updates
         theme: {
           root: {
             primaryColor: "#4A90E2",  // Soft blue as primary color

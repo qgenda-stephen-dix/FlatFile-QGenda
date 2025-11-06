@@ -23,6 +23,9 @@ import { customDownloadWorkbookAction } from "./blueprints/actions/custom-downlo
 import { rolloutPlugin } from "./plugins/rollout.plugin";
 import { generateFieldMappings } from "./utils/field-mappings";
 import { debugSpacesListener } from "./listeners/debug-spaces.listener";
+import { malpracticeDeduplicationAction } from "./blueprints/actions/malpractice-deduplication.action";
+import { educationGapValidationHook } from "./listeners/education-gap-validation.listener";
+import { validateEducationGapAction } from "./blueprints/actions/validate-education-gap.action";
 
 export default function (listener: FlatfileListener) {
   // Generate field mappings dynamically from sheet configurations
@@ -55,7 +58,12 @@ export default function (listener: FlatfileListener) {
   listener.use(validateOtherCertificationAction);
   listener.use(malpracticeInsuranceValidationHook);
   listener.use(validateMalpracticeInsuranceAction);
+  listener.use(educationGapValidationHook);
+  listener.use(validateEducationGapAction);
   listener.use(debugSpacesListener);  // Add debug listener
+
+  // Add malpractice insurance deduplication action
+  malpracticeDeduplicationAction(listener);
 
   // Register the rollout plugin root handler for agent deployment events
   listener.use(rolloutPlugin.root);

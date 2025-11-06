@@ -395,6 +395,12 @@ export const malpracticeInsuranceSheet: Flatfile.SheetConfig = {
       mode: 'background',
       label: 'Validate Malpractice Insurance',
       description: 'Validates malpractice insurance records with comprehensive business rules'
+    },
+    {
+      operation: 'dedupeMalpracticeInsurance',
+      mode: 'foreground',
+      label: 'Remove Duplicate Insurance Records',
+      description: 'Identify and flag duplicate malpractice insurance records for the same provider, carrier, and policy'
     }
   ]
 }
