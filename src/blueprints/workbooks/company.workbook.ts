@@ -7,12 +7,15 @@ import { stateLicenseSheet } from "../sheets/state-license.sheet";
 import { deaLicenseSheet } from "../sheets/dea-license.sheet";
 import { affiliationSheet } from "../sheets/affiliation.sheet";
 import { boardCertificationSheet } from "../sheets/board-certification.sheet";
+import { otherCertificationSheet } from "../sheets/other-certification.sheet";
+import { malpracticeInsuranceSheet } from "../sheets/malpractice-insurance.sheet";
+import { educationGapSheet } from "../sheets/education-gap.sheet";
 
 export const companyWorkbook: Flatfile.CreateWorkbookConfig = {
   name: "Company Workbook",
   namespace: "workbook:qgenda-company",
   labels: [ "pinned" ],
-  sheets: [ usersSheet, demographicSheet, demographicV2Sheet, demographicReferenceSheet, stateLicenseSheet, deaLicenseSheet, affiliationSheet, boardCertificationSheet ],
+  sheets: [ usersSheet, demographicSheet, demographicV2Sheet, demographicReferenceSheet, stateLicenseSheet, deaLicenseSheet, affiliationSheet, boardCertificationSheet, otherCertificationSheet, malpracticeInsuranceSheet, educationGapSheet ],
   actions: [ {
     operation: "downloadWorkbook",
     mode: "foreground",

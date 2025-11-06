@@ -15,9 +15,17 @@ import { deaLicenseValidationHook } from "./listeners/dea-license-validation.lis
 import { validateDEALicenseAction } from "./blueprints/actions/validate-dea-license.action";
 import { affiliationValidationHook } from "./listeners/affiliation-validation.listener";
 import { validateAffiliationAction } from "./blueprints/actions/validate-affiliation.action";
+import { otherCertificationValidationHook } from "./listeners/other-certification-validation.listener";
+import { validateOtherCertificationAction } from "./blueprints/actions/validate-other-certification.action";
+import malpracticeInsuranceValidationHook from "./listeners/malpractice-insurance-validation.listener";
+import { validateMalpracticeInsuranceAction } from "./blueprints/actions/validate-malpractice-insurance.action";
 import { customDownloadWorkbookAction } from "./blueprints/actions/custom-download-workbook.action";
 import { rolloutPlugin } from "./plugins/rollout.plugin";
 import { generateFieldMappings } from "./utils/field-mappings";
+import { debugSpacesListener } from "./listeners/debug-spaces.listener";
+import { malpracticeDeduplicationAction } from "./blueprints/actions/malpractice-deduplication.action";
+import { educationGapValidationHook } from "./listeners/education-gap-validation.listener";
+import { validateEducationGapAction } from "./blueprints/actions/validate-education-gap.action";
 
 export default function (listener: FlatfileListener) {
   // Generate field mappings dynamically from sheet configurations
@@ -46,6 +54,16 @@ export default function (listener: FlatfileListener) {
   listener.use(validateDEALicenseAction);
   listener.use(affiliationValidationHook);
   listener.use(validateAffiliationAction);
+  listener.use(otherCertificationValidationHook);
+  listener.use(validateOtherCertificationAction);
+  listener.use(malpracticeInsuranceValidationHook);
+  listener.use(validateMalpracticeInsuranceAction);
+  listener.use(educationGapValidationHook);
+  listener.use(validateEducationGapAction);
+  listener.use(debugSpacesListener);  // Add debug listener
+
+  // Add malpractice insurance deduplication action
+  malpracticeDeduplicationAction(listener);
 
   // Register the rollout plugin root handler for agent deployment events
   listener.use(rolloutPlugin.root);

@@ -1,7 +1,26 @@
 # Best Practices
 
+## 🎯 **New Sheet Creation**
+- **ALWAYS** follow the standardized template in `src/guides/sheet-blueprint-template.md`
+- **ALWAYS** include X1-X10 custom fields in every new sheet
+- **ALWAYS** use the quick checklist in `src/guides/new-sheet-checklist.md`
+- Test auto-update functionality after creation
 
-1. **File Organization**
+## 📋 **Sheet Configuration Standards**
+
+1. **Field Requirements**
+   - Include all fields from specification
+   - Add X1-X10 custom string fields (standard requirement)
+   - Use proper field types: string, enum, date, number
+   - Mark required fields with constraints
+   - Validate character limits in listeners (not constraints)
+
+2. **Enum Best Practices**
+   - Value and label should match exactly: `{ value: "Y", label: "Y" }`
+   - Avoid `allow_empty` property (not supported in API)
+   - Use consistent Y/N or T/F patterns as specified
+
+3. **File Organization**
    - One sheet per file
    - Use descriptive file names
    - Export all sheets through an index file

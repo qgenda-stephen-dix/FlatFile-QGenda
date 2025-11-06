@@ -317,6 +317,12 @@ export const deaLicenseSheet: Flatfile.SheetConfig = {
       mode: "foreground",
       label: "Validate DEA License",
       description: "Comprehensive validation of DEA License information per specification"
+    },
+    {
+      operation: "dedupeDEALicense",
+      mode: "foreground",
+      label: "Remove Duplicate DEA Licenses",
+      description: "Identify and flag duplicate DEA license records for the same provider"
     }
   ]
 };
