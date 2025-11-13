@@ -20,11 +20,7 @@ export const companyPrivilegesValidationHook = (listener: FlatfileListener) => {
       }
 
       // Note: ICD/CPT Code and Specialty are now optional fields
-
-      // Character limit validations
-      if (privilegeName && privilegeName.length > 100) {
-        record.addError("privilege_name", "Privilege Name exceeds character limit of 100");
-      }
+      // Note: Privilege Name has no text constraints (no character limits or character restrictions)
 
       if (icdCptCode && icdCptCode.length > 50) {
         record.addError("icd_cpt_code", "ICD/CPT Code exceeds character limit of 50");
@@ -100,14 +96,7 @@ export const companyPrivilegesValidationHook = (listener: FlatfileListener) => {
         }
       }
 
-      // Privilege Name validation for special characters
-      if (privilegeName && privilegeName.trim()) {
-        // Check for potentially problematic characters
-        const invalidChars = /[<>\"&]/;
-        if (invalidChars.test(privilegeName)) {
-          record.addError("privilege_name", "Privilege Name contains invalid characters: < > \" &");
-        }
-      }
+      // Privilege Name - no text constraints applied
 
       // TODO: Production validations that would be implemented:
       // - Validate specialty values against actual Specialty List Management

@@ -11,7 +11,7 @@ export const companyPrivilegesSheet: Flatfile.SheetConfig = {
       key: "privilege_name",
       type: "string",
       label: "Privilege Name",
-      description: "Required field - ADD only, no updating. Max 100 characters",
+      description: "Required field - ADD only, no updating. No text constraints",
       constraints: [
         {
           type: "required"
