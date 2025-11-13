@@ -44,6 +44,18 @@ import { providerPayerEnrollmentDatesValidationHook } from "./listeners/provider
 import { validateProviderPayerEnrollmentDatesAction } from "./blueprints/actions/validate-provider-payer-enrollment-dates.action";
 import { locationValidationHook } from "./listeners/location-validation.listener";
 import { validateLocationAction } from "./blueprints/actions/validate-location.action";
+import { driversLicenseValidationHook } from "./listeners/drivers-license-validation.listener";
+import { validateDriversLicenseAction } from "./blueprints/actions/validate-drivers-license.action";
+import { malpracticeClaimValidationHook } from "./listeners/malpractice-claim-validation.listener";
+import { validateMalpracticeClaimAction } from "./blueprints/actions/validate-malpractice-claim.action";
+import { personalReferenceValidationHook } from "./listeners/personal-reference-validation.listener";
+import { personalReferenceBatchValidationHook } from "./listeners/personal-reference-batch-validation.action";
+import { companyPrivilegesValidationHook } from "./listeners/company-privileges-validation.listener";
+import { companyPrivilegesBatchValidationHook } from "./listeners/company-privileges-batch-validation.action";
+import { providerPrivilegesValidationHook } from "./listeners/provider-privileges-validation.listener";
+import { providerPrivilegesBatchValidationHook } from "./listeners/provider-privileges-batch-validation.action";
+import { professionalTrainingValidationHook } from "./listeners/professional-training-validation.listener";
+import { companyProfessionalTrainingBatchValidationAction } from "./listeners/company-professional-training-batch-validation.action";
 
 export default function (listener: FlatfileListener) {
   // Generate field mappings dynamically from sheet configurations
@@ -96,6 +108,18 @@ export default function (listener: FlatfileListener) {
   listener.use(validateProviderPayerEnrollmentDatesAction);
   listener.use(locationValidationHook);
   listener.use(validateLocationAction);
+  listener.use(driversLicenseValidationHook);
+  listener.use(validateDriversLicenseAction);
+  listener.use(malpracticeClaimValidationHook);
+  listener.use(validateMalpracticeClaimAction);
+  listener.use(personalReferenceValidationHook);
+  personalReferenceBatchValidationHook(listener);
+  listener.use(companyPrivilegesValidationHook);
+  companyPrivilegesBatchValidationHook(listener);
+  listener.use(providerPrivilegesValidationHook);
+  providerPrivilegesBatchValidationHook(listener);
+  listener.use(professionalTrainingValidationHook);
+  companyProfessionalTrainingBatchValidationAction(listener);
   listener.use(debugSpacesListener);  // Add debug listener
 
   // Add malpractice insurance deduplication action

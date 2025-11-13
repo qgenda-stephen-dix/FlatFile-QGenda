@@ -1,0 +1,19 @@
+provider_name,external_id,external_id_type,location_name,location_key,privilege_name,conditions,appt_date,reappt_date,status,granted_by,ignore_required_fields_validation
+Dr. Sarah Johnson,1234567891,NPI,Main Hospital,12345678-1234-5678-9abc-123456789012,Cardiac Catheterization,Board certified in interventional cardiology with 5+ years experience,1/15/2023,1/15/2025,Approved,Medical Staff Committee,N
+Dr. Michael Chen,PROV001,ProviderID,Surgery Center,87654321-4321-8765-dcba-987654321098,Laparoscopic Surgery,Fellowship trained in minimally invasive surgery,3/1/2023,3/1/2024,Approved,Department Head,
+Dr. Jennifer Davis,EMR12345,EmrID,Emergency Department,11111111-2222-3333-4444-555555555555,Emergency Intubation,ACLS certified with airway management training,6/1/2023,6/1/2024,Approved,Chief of Emergency Medicine,Y
+Dr. Robert Wilson,INT789,InternalID,Pediatric Unit,aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee,Pediatric Sedation,PALS certification and pediatric anesthesia fellowship,9/15/2022,9/15/2024,Approved,Pediatric Committee,N
+Dr. Lisa Anderson,BILL456,BillingSystemID,Orthopedic Clinic,99999999-8888-7777-6666-555555555555,Spine Surgery,Spine fellowship with 200+ spinal fusion procedures,12/1/2022,12/1/2023,Pending,Credentials Committee,
+Dr. Kevin Martinez,2345678901,NPI,Dermatology Center,fedcba98-7654-3210-fedc-ba9876543210,Mohs Surgery,Dermatopathology fellowship and Mohs surgery certification,4/10/2023,4/10/2025,Active,Medical Director,N
+Dr. Amanda Taylor,PROV002,ProviderID,Neurology Department,abcdef12-3456-7890-abcd-ef1234567890,EEG Monitoring,Board certified neurology with epilepsy subspecialty,8/20/2023,8/20/2024,Approved,Neurology Department Head,
+Dr. Christopher Lee,1567890123,NPI,GI Lab,12340000-0000-0000-0000-000000000000,Endoscopy Suite Access,Gastroenterology fellowship with advanced endoscopy training,2/1/2023,2/1/2025,Denied,GI Committee,Y
+Dr. Michelle White,INVALID001,ProviderID,Radiology,22222222-3333-4444-5555-666666666666,Invalid Privilege Test,Testing privilege name validation,7/1/2023,7/1/2024,Approved,Radiology Head,N
+Dr. Daniel Garcia,DUPLICATE123,InternalID,ICU,33333333-4444-5555-6666-777777777777,Duplicate Privilege Name,Testing duplicate privilege validation,10/1/2023,10/1/2024,Suspended,ICU Director,
+Test Provider,MISMATCH456,ProviderID,Cardiac Cath Lab,44444444-5555-6666-7777-888888888888,Privilege Type Mismatch,Testing provider specialty mismatch warning,5/15/2023,5/15/2024,Approved,Cardiac Committee,Y
+Dr. Patricia Martinez,INACTIVE789,NPI,Archived Location,archived12-3456-7890-abcd-ef1234567890,General Surgery,Testing inactive provider warning,11/1/2022,11/1/2023,Expired,Surgery Committee,N
+,1234567890,NPI,Test Location,55555555-6666-7777-8888-999999999999,Missing External ID Test,,1/1/2023,12/31/2023,Approved,Test Committee,
+Dr. Test User,TESTID001,,Missing Location Key,,Incomplete Record Test,Testing missing required fields,3/15/2023,,Pending,,Y
+Dr. Valid Provider,3456789012,NPI,Complete Location,66666666-7777-8888-9999-aaaaaaaaaaaa,Complete Privilege Test,All fields properly completed with valid data,6/30/2023,6/30/2025,Approved,Complete Committee,N
+Dr. Date Test,4567890123,ProviderID,Date Test Location,77777777-8888-9999-aaaa-bbbbbbbbbbbb,Date Validation Test,Testing invalid date formats,13/32/2023,32/13/2024,Approved,Date Committee,
+Dr. Status Test,5678901234,NPI,Status Location,88888888-9999-aaaa-bbbb-cccccccccccc,Status Test Privilege,Testing invalid status value,4/1/2023,4/1/2024,InvalidStatus,Status Committee,Y
+Dr. Reappt Test,6789012345,EmrID,Reappt Location,99999999-aaaa-bbbb-cccc-dddddddddddd,Reappt Date Test,Testing reappointment date before appointment date,8/15/2023,8/10/2023,Approved,Reappt Committee,N

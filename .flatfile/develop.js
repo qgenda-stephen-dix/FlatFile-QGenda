@@ -164704,6 +164704,264 @@ exports.validateDEALicenseAction = (0, plugin_job_handler_1.jobHandler)("sheet:v
 
 /***/ }),
 
+/***/ 7029:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.validateDriversLicenseAction = void 0;
+const api_1 = __importDefault(__nccwpck_require__(45055));
+const validateDriversLicenseAction = (listener) => {
+    listener.filter({ job: "sheet:validateDriversLicense" }, (configure) => {
+        configure.on("job:ready", async (event) => {
+            const { jobId, sheetId } = event.context;
+            try {
+                await api_1.default.jobs.ack(jobId, {
+                    info: "Starting Driver's License validation...",
+                    progress: 10,
+                });
+                const records = await api_1.default.records.get(sheetId);
+                let validRecords = 0;
+                let errorRecords = 0;
+                const duplicateExternalIds = new Set();
+                const externalIdCombinations = new Map();
+                // Track duplicate External ID combinations for validation
+                records.data.records?.forEach((record, index) => {
+                    const externalId = record.values.external_id?.value;
+                    const externalIdType = record.values.external_id_type?.value;
+                    if (externalId?.trim() && externalIdType?.trim()) {
+                        const combination = `${externalId.trim()}|${externalIdType.trim()}`;
+                        if (externalIdCombinations.has(combination)) {
+                            duplicateExternalIds.add(combination);
+                        }
+                        else {
+                            externalIdCombinations.set(combination, index);
+                        }
+                    }
+                });
+                await api_1.default.jobs.ack(jobId, {
+                    info: "Validating Driver's License records...",
+                    progress: 50,
+                });
+                const updatedRecords = records.data.records?.map((record, index) => {
+                    const messages = [];
+                    // Get field values
+                    const externalId = record.values.external_id?.value;
+                    const externalIdType = record.values.external_id_type?.value;
+                    const stateProvince = record.values.state_province?.value;
+                    const licenseNumber = record.values.license_number?.value;
+                    const nameAsAppearsOnLicense = record.values.name_as_appears_on_license?.value;
+                    const issueDate = record.values.issue_date?.value;
+                    const expiresOn = record.values.expires_on?.value;
+                    const monitorExpirationDate = record.values.monitor_expiration_date?.value;
+                    const recordViewableByProvider = record.values.record_viewable_by_provider?.value;
+                    const fileViewableByProvider = record.values.file_viewable_by_provider?.value;
+                    const fileKey = record.values.file_key?.value;
+                    const note = record.values.note?.value;
+                    const user = record.values.user?.value;
+                    const timestamp = record.values.timestamp?.value;
+                    // Required field validations
+                    if (!externalId?.trim()) {
+                        messages.push({
+                            type: "error",
+                            field: "external_id",
+                            message: "External Id required"
+                        });
+                    }
+                    if (!externalIdType?.trim()) {
+                        messages.push({
+                            type: "error",
+                            field: "external_id_type",
+                            message: "External Id Type required"
+                        });
+                    }
+                    if (!stateProvince?.trim()) {
+                        messages.push({
+                            type: "error",
+                            field: "state_province",
+                            message: "State required"
+                        });
+                    }
+                    // Duplicate External ID validation
+                    if (externalId?.trim() && externalIdType?.trim()) {
+                        const combination = `${externalId.trim()}|${externalIdType.trim()}`;
+                        if (duplicateExternalIds.has(combination)) {
+                            messages.push({
+                                type: "error",
+                                field: "external_id",
+                                message: "Duplicate External ID and External ID Type combination found in file"
+                            });
+                        }
+                    }
+                    // Character limit validations
+                    if (licenseNumber && licenseNumber.length > 50) {
+                        messages.push({
+                            type: "error",
+                            field: "license_number",
+                            message: "License Number exceeds character limit of 50"
+                        });
+                    }
+                    if (nameAsAppearsOnLicense && nameAsAppearsOnLicense.length > 50) {
+                        messages.push({
+                            type: "error",
+                            field: "name_as_appears_on_license",
+                            message: "Name as Appears on License exceeds character limit of 50"
+                        });
+                    }
+                    if (note && note.length > 10000) {
+                        messages.push({
+                            type: "error",
+                            field: "note",
+                            message: "Note exceeds character limit of 10000"
+                        });
+                    }
+                    // Date format validation
+                    const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+                    if (issueDate && !dateRegex.test(issueDate)) {
+                        messages.push({
+                            type: "error",
+                            field: "issue_date",
+                            message: "Issue Date must be formatted as m/d/yyyy"
+                        });
+                    }
+                    if (expiresOn && !dateRegex.test(expiresOn)) {
+                        messages.push({
+                            type: "error",
+                            field: "expires_on",
+                            message: "Expires On must be formatted as m/d/yyyy"
+                        });
+                    }
+                    if (timestamp && !dateRegex.test(timestamp)) {
+                        messages.push({
+                            type: "error",
+                            field: "timestamp",
+                            message: "Timestamp must be formatted as m/d/yyyy"
+                        });
+                    }
+                    // Date validation logic
+                    if (issueDate && expiresOn && dateRegex.test(issueDate) && dateRegex.test(expiresOn)) {
+                        const [issueMonth, issueDay, issueYear] = issueDate.split('/').map(Number);
+                        const [expiresMonth, expiresDay, expiresYear] = expiresOn.split('/').map(Number);
+                        const issueDateObj = new Date(issueYear, issueMonth - 1, issueDay);
+                        const expiresDateObj = new Date(expiresYear, expiresMonth - 1, expiresDay);
+                        if (issueDateObj >= expiresDateObj) {
+                            messages.push({
+                                type: "error",
+                                field: "issue_date",
+                                message: "Issue Date must be before Expiration Date"
+                            });
+                        }
+                    }
+                    // T/F validation
+                    if (monitorExpirationDate && monitorExpirationDate.trim() && !["T", "F"].includes(monitorExpirationDate.trim())) {
+                        messages.push({
+                            type: "error",
+                            field: "monitor_expiration_date",
+                            message: "Monitor Expiration Date must be T or F"
+                        });
+                    }
+                    if (recordViewableByProvider && recordViewableByProvider.trim() && !["T", "F"].includes(recordViewableByProvider.trim())) {
+                        messages.push({
+                            type: "error",
+                            field: "record_viewable_by_provider",
+                            message: "Record Viewable by Provider must be T or F"
+                        });
+                    }
+                    if (fileViewableByProvider && fileViewableByProvider.trim() && !["T", "F"].includes(fileViewableByProvider.trim())) {
+                        messages.push({
+                            type: "error",
+                            field: "file_viewable_by_provider",
+                            message: "File Viewable by Provider must be T or F"
+                        });
+                    }
+                    // Business rule warning
+                    if (recordViewableByProvider === "F" && fileViewableByProvider === "T") {
+                        messages.push({
+                            type: "warning",
+                            field: "file_viewable_by_provider",
+                            message: "File Viewable by Provider must be set to 'F' on records where Record Viewable by Provider is set to 'F'"
+                        });
+                    }
+                    // GUID format validation
+                    if (fileKey && fileKey.trim()) {
+                        const guidRegex = /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/;
+                        if (!guidRegex.test(fileKey.trim())) {
+                            messages.push({
+                                type: "error",
+                                field: "file_key",
+                                message: "File Key must be a valid GUID"
+                            });
+                        }
+                    }
+                    // User validation warning
+                    if (!user?.trim()) {
+                        messages.push({
+                            type: "warning",
+                            field: "user",
+                            message: "No User listed, so \"Credentialing System\" will be listed"
+                        });
+                    }
+                    // State validation (basic check)
+                    if (stateProvince && stateProvince.trim()) {
+                        const validStates = [
+                            "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
+                            "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
+                            "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
+                            "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC",
+                            "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY",
+                            "DC"
+                        ];
+                        if (!validStates.includes(stateProvince.trim().toUpperCase())) {
+                            messages.push({
+                                type: "error",
+                                field: "state_province",
+                                message: "State/province not supported"
+                            });
+                        }
+                    }
+                    // TODO: Additional import-level validations would include:
+                    // - External ID matching against existing providers
+                    // - File Key validation against actual file database
+                    // - User email validation against Cred Spec emails
+                    // - Provider active/inactive status checks
+                    if (messages.some(m => m.type === "error")) {
+                        errorRecords++;
+                    }
+                    else {
+                        validRecords++;
+                    }
+                    return {
+                        ...record,
+                        messages: messages
+                    };
+                }) || [];
+                await api_1.default.records.update(sheetId, updatedRecords);
+                await api_1.default.jobs.complete(jobId, {
+                    outcome: {
+                        message: `Driver's License validation completed. ${validRecords} valid records, ${errorRecords} records with errors. Found ${duplicateExternalIds.size} duplicate External ID combinations.`,
+                    },
+                });
+            }
+            catch (error) {
+                console.error("Error in Driver's License validation:", error);
+                await api_1.default.jobs.fail(jobId, {
+                    outcome: {
+                        message: `Driver's License validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                    },
+                });
+            }
+        });
+    });
+};
+exports.validateDriversLicenseAction = validateDriversLicenseAction;
+
+
+/***/ }),
+
 /***/ 56345:
 /***/ ((__unused_webpack_module, exports) => {
 
@@ -165243,6 +165501,344 @@ const validateLocationAction = (listener) => {
     });
 };
 exports.validateLocationAction = validateLocationAction;
+
+
+/***/ }),
+
+/***/ 91062:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.validateMalpracticeClaimAction = void 0;
+const api_1 = __importDefault(__nccwpck_require__(45055));
+const validateMalpracticeClaimAction = (listener) => {
+    listener.filter({ job: "sheet:validateMalpracticeClaim" }, (configure) => {
+        configure.on("job:ready", async (event) => {
+            const { jobId, sheetId } = event.context;
+            try {
+                await api_1.default.jobs.ack(jobId, {
+                    info: "Starting Malpractice Claim validation...",
+                    progress: 10,
+                });
+                const records = await api_1.default.records.get(sheetId);
+                let validRecords = 0;
+                let errorRecords = 0;
+                const duplicateExternalIds = new Set();
+                const externalIdCombinations = new Map();
+                // Track duplicate External ID combinations for validation
+                records.data.records?.forEach((record, index) => {
+                    const externalId = record.values.external_id?.value;
+                    const externalIdType = record.values.external_id_type?.value;
+                    if (externalId?.trim() && externalIdType?.trim()) {
+                        const combination = `${externalId.trim()}|${externalIdType.trim()}`;
+                        if (externalIdCombinations.has(combination)) {
+                            duplicateExternalIds.add(combination);
+                        }
+                        else {
+                            externalIdCombinations.set(combination, index);
+                        }
+                    }
+                });
+                await api_1.default.jobs.ack(jobId, {
+                    info: "Validating Malpractice Claim records...",
+                    progress: 50,
+                });
+                const updatedRecords = records.data.records?.map((record, index) => {
+                    const messages = [];
+                    // Get field values
+                    const externalId = record.values.external_id?.value;
+                    const externalIdType = record.values.external_id_type?.value;
+                    const organizationName = record.values.organization_name?.value;
+                    const reportingEntity = record.values.reporting_entity?.value;
+                    const primaryActOmission = record.values.primary_act_omission?.value;
+                    const incidentDate = record.values.incident_date?.value;
+                    const judgmentDate = record.values.judgment_date?.value;
+                    const claimStatus = record.values.claim_status?.value;
+                    const caseNumber = record.values.case_number?.value;
+                    const carrierAttorneyStatement = record.values.carrier_attorney_statement?.value;
+                    const descriptionOfJudgment = record.values.description_of_judgment?.value;
+                    const numberOfPractitioners = record.values.number_of_practitioners?.value;
+                    const totalPaidForThisPractitioner = record.values.total_paid_for_this_practitioner?.value;
+                    const typesOfPayment = record.values.types_of_payment?.value;
+                    const paymentResults = record.values.payment_results?.value;
+                    const paymentDate = record.values.payment_date?.value;
+                    const totalPaidForClaim = record.values.total_paid_for_claim?.value;
+                    const roleInClaim = record.values.role_in_claim?.value;
+                    const providerStatement = record.values.provider_statement?.value;
+                    const fileKey = record.values.file_key?.value;
+                    const note = record.values.note?.value;
+                    const user = record.values.user?.value;
+                    const timestamp = record.values.timestamp?.value;
+                    // Required field validations
+                    if (!externalId?.trim()) {
+                        messages.push({
+                            type: "error",
+                            field: "external_id",
+                            message: "External Id required"
+                        });
+                    }
+                    if (!externalIdType?.trim()) {
+                        messages.push({
+                            type: "error",
+                            field: "external_id_type",
+                            message: "External Id Type required"
+                        });
+                    }
+                    if (!organizationName?.trim()) {
+                        messages.push({
+                            type: "error",
+                            field: "organization_name",
+                            message: "Organization Name required"
+                        });
+                    }
+                    if (!reportingEntity?.trim()) {
+                        messages.push({
+                            type: "error",
+                            field: "reporting_entity",
+                            message: "Reporting Entity required"
+                        });
+                    }
+                    if (!incidentDate?.trim()) {
+                        messages.push({
+                            type: "error",
+                            field: "incident_date",
+                            message: "Incident Date required"
+                        });
+                    }
+                    // Duplicate External ID validation
+                    if (externalId?.trim() && externalIdType?.trim()) {
+                        const combination = `${externalId.trim()}|${externalIdType.trim()}`;
+                        if (duplicateExternalIds.has(combination)) {
+                            messages.push({
+                                type: "error",
+                                field: "external_id",
+                                message: "Duplicate External ID and External ID Type combination found in file"
+                            });
+                        }
+                    }
+                    // Character limit validations
+                    if (organizationName && organizationName.length > 100) {
+                        messages.push({
+                            type: "error",
+                            field: "organization_name",
+                            message: "Organization Name exceeds character limit of 100"
+                        });
+                    }
+                    if (reportingEntity && reportingEntity.length > 100) {
+                        messages.push({
+                            type: "error",
+                            field: "reporting_entity",
+                            message: "Reporting Entity exceeds character limit of 100"
+                        });
+                    }
+                    if (primaryActOmission && primaryActOmission.length > 500) {
+                        messages.push({
+                            type: "error",
+                            field: "primary_act_omission",
+                            message: "Primary Act / Omission exceeds character limit of 500"
+                        });
+                    }
+                    if (caseNumber && caseNumber.length > 50) {
+                        messages.push({
+                            type: "error",
+                            field: "case_number",
+                            message: "Case # exceeds character limit of 50"
+                        });
+                    }
+                    if (carrierAttorneyStatement && carrierAttorneyStatement.length > 5000) {
+                        messages.push({
+                            type: "error",
+                            field: "carrier_attorney_statement",
+                            message: "Carrier / Attorney Statement exceeds character limit of 5000"
+                        });
+                    }
+                    if (descriptionOfJudgment && descriptionOfJudgment.length > 5000) {
+                        messages.push({
+                            type: "error",
+                            field: "description_of_judgment",
+                            message: "Description of Judgment exceeds character limit of 5000"
+                        });
+                    }
+                    if (paymentResults && paymentResults.length > 5000) {
+                        messages.push({
+                            type: "error",
+                            field: "payment_results",
+                            message: "Payment Results exceeds character limit of 5000"
+                        });
+                    }
+                    if (roleInClaim && roleInClaim.length > 100) {
+                        messages.push({
+                            type: "error",
+                            field: "role_in_claim",
+                            message: "Role in Claim exceeds character limit of 100"
+                        });
+                    }
+                    if (providerStatement && providerStatement.length > 5000) {
+                        messages.push({
+                            type: "error",
+                            field: "provider_statement",
+                            message: "Provider Statement exceeds character limit of 5000"
+                        });
+                    }
+                    if (note && note.length > 10000) {
+                        messages.push({
+                            type: "error",
+                            field: "note",
+                            message: "Note exceeds character limit of 10000"
+                        });
+                    }
+                    // Date format validation
+                    const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+                    if (incidentDate && !dateRegex.test(incidentDate)) {
+                        messages.push({
+                            type: "error",
+                            field: "incident_date",
+                            message: "Incident Date must be formatted as m/d/yyyy"
+                        });
+                    }
+                    if (judgmentDate && judgmentDate.trim() && !dateRegex.test(judgmentDate)) {
+                        messages.push({
+                            type: "error",
+                            field: "judgment_date",
+                            message: "Judgment Date must be formatted as m/d/yyyy"
+                        });
+                    }
+                    if (paymentDate && paymentDate.trim() && !dateRegex.test(paymentDate)) {
+                        messages.push({
+                            type: "error",
+                            field: "payment_date",
+                            message: "Payment Date must be formatted as m/d/yyyy"
+                        });
+                    }
+                    if (timestamp && timestamp.trim() && !dateRegex.test(timestamp)) {
+                        messages.push({
+                            type: "error",
+                            field: "timestamp",
+                            message: "Timestamp must be formatted as m/d/yyyy"
+                        });
+                    }
+                    // Number of Practitioners validation
+                    if (numberOfPractitioners && numberOfPractitioners.trim()) {
+                        const practitionerCount = parseInt(numberOfPractitioners.trim(), 10);
+                        if (isNaN(practitionerCount) || practitionerCount < 1 || practitionerCount > 999) {
+                            messages.push({
+                                type: "error",
+                                field: "number_of_practitioners",
+                                message: "# of Practitioners must be an integer between 1 and 999"
+                            });
+                        }
+                    }
+                    // Payment amount validations
+                    const validatePaymentAmount = (amountStr, fieldKey, fieldName) => {
+                        if (amountStr && amountStr.trim()) {
+                            const cleanAmount = amountStr.replace(/[$,]/g, '').trim();
+                            const amount = parseFloat(cleanAmount);
+                            if (isNaN(amount)) {
+                                messages.push({
+                                    type: "error",
+                                    field: fieldKey,
+                                    message: `${fieldName} must be a valid number`
+                                });
+                            }
+                            else if (amount > 2100000000) {
+                                messages.push({
+                                    type: "error",
+                                    field: fieldKey,
+                                    message: `${fieldName} cannot exceed 2.1 billion`
+                                });
+                            }
+                            if (cleanAmount.length > 12) {
+                                messages.push({
+                                    type: "error",
+                                    field: fieldKey,
+                                    message: `${fieldName} exceeds character limit of 12`
+                                });
+                            }
+                        }
+                    };
+                    validatePaymentAmount(totalPaidForThisPractitioner, "total_paid_for_this_practitioner", "Total Paid for this Practitioner");
+                    validatePaymentAmount(totalPaidForClaim, "total_paid_for_claim", "Total Paid for Claim");
+                    // Dropdown validations
+                    if (claimStatus && claimStatus.trim()) {
+                        const validClaimStatuses = ["Open", "Closed", "Settled", "Dismissed", "Pending"];
+                        if (!validClaimStatuses.includes(claimStatus.trim())) {
+                            messages.push({
+                                type: "error",
+                                field: "claim_status",
+                                message: "Claim Status not supported"
+                            });
+                        }
+                    }
+                    if (typesOfPayment && typesOfPayment.trim()) {
+                        const validPaymentTypes = ["Settlement", "Judgment", "Defense Costs", "Other"];
+                        if (!validPaymentTypes.includes(typesOfPayment.trim())) {
+                            messages.push({
+                                type: "error",
+                                field: "types_of_payment",
+                                message: "Types of Payment not supported"
+                            });
+                        }
+                    }
+                    // GUID format validation
+                    if (fileKey && fileKey.trim()) {
+                        const guidRegex = /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/;
+                        if (!guidRegex.test(fileKey.trim())) {
+                            messages.push({
+                                type: "error",
+                                field: "file_key",
+                                message: "File Key must be a valid GUID"
+                            });
+                        }
+                    }
+                    // User validation warning
+                    if (!user?.trim()) {
+                        messages.push({
+                            type: "warning",
+                            field: "user",
+                            message: "No User listed, so \"Credentialing System\" will be listed"
+                        });
+                    }
+                    // TODO: Additional import-level validations would include:
+                    // - External ID matching against existing providers
+                    // - File Key validation against actual file database
+                    // - User email validation against Cred Spec emails
+                    // - Provider active/inactive status checks
+                    // - File Key linking/unlinking warnings
+                    if (messages.some(m => m.type === "error")) {
+                        errorRecords++;
+                    }
+                    else {
+                        validRecords++;
+                    }
+                    return {
+                        ...record,
+                        messages: messages
+                    };
+                }) || [];
+                await api_1.default.records.update(sheetId, updatedRecords);
+                await api_1.default.jobs.complete(jobId, {
+                    outcome: {
+                        message: `Malpractice Claim validation completed. ${validRecords} valid records, ${errorRecords} records with errors. Found ${duplicateExternalIds.size} duplicate External ID combinations.`,
+                    },
+                });
+            }
+            catch (error) {
+                console.error("Error in Malpractice Claim validation:", error);
+                await api_1.default.jobs.fail(jobId, {
+                    outcome: {
+                        message: `Malpractice Claim validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                    },
+                });
+            }
+        });
+    });
+};
+exports.validateMalpracticeClaimAction = validateMalpracticeClaimAction;
 
 
 /***/ }),
@@ -167704,6 +168300,88 @@ exports.cmeSheet = {
 
 /***/ }),
 
+/***/ 9930:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.companyPrivilegesSheet = void 0;
+// Company Privileges Import Format sheet configuration
+exports.companyPrivilegesSheet = {
+    name: "Company Privileges Import Format",
+    slug: "company_privileges",
+    access: ["*"],
+    fields: [
+        // Required Field
+        {
+            key: "privilege_name",
+            type: "string",
+            label: "Privilege Name",
+            description: "Required field - ADD only, no updating. Max 100 characters",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        // Optional Core Fields
+        {
+            key: "icd_cpt_code",
+            type: "string",
+            label: "ICD/CPT Code",
+            description: "Optional - Max 50 characters. Must be unique within file"
+        },
+        {
+            key: "specialty",
+            type: "string",
+            label: "Specialty",
+            description: "Optional - Pipe-delimited values (|). Max 100 characters total. Must exist in Specialty List Management"
+        },
+        {
+            key: "subspecialty",
+            type: "string",
+            label: "Subspecialty",
+            description: "Optional - Pipe-delimited values (|). Max 100 characters total. Must exist in Specialty List Management"
+        },
+        {
+            key: "description",
+            type: "string",
+            label: "Description",
+            description: "Optional - Max 10,000 characters"
+        },
+        {
+            key: "qualifications",
+            type: "string",
+            label: "Qualifications",
+            description: "Optional - Max 10,000 characters"
+        },
+        {
+            key: "competency",
+            type: "string",
+            label: "Competency",
+            description: "Optional - Max 10,000 characters"
+        },
+        {
+            key: "include_in_all_locations",
+            type: "string",
+            label: "Include in All Locations",
+            description: "Optional - Configuration setting for location application"
+        }
+    ],
+    actions: [
+        {
+            operation: "companyPrivilegesValidateAction",
+            mode: "background",
+            label: "Validate Company Privileges Data",
+            description: "Run comprehensive validation on Company Privileges Import Format data including duplicate detection and specialty validation"
+        }
+    ]
+};
+
+
+/***/ }),
+
 /***/ 37019:
 /***/ ((__unused_webpack_module, exports) => {
 
@@ -169387,6 +170065,229 @@ exports.demographicSheet = {
 
 /***/ }),
 
+/***/ 31043:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.driversLicenseSheet = void 0;
+exports.driversLicenseSheet = {
+    name: "Driver's License Import Format",
+    slug: "drivers_license",
+    access: ["*"],
+    fields: [
+        // Key Identity Fields
+        {
+            key: "provider_name",
+            type: "string",
+            label: "Provider Name",
+            description: "Dummy Column - Provider identification field"
+        },
+        {
+            key: "external_id",
+            type: "string",
+            label: "External ID",
+            description: "Key field for updating, Required field",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "external_id_type",
+            type: "enum",
+            label: "External ID Type",
+            description: "Key field for updating, Required field",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ],
+            config: {
+                options: [
+                    { value: "NPI", label: "NPI" },
+                    { value: "InternalID", label: "Internal ID" },
+                    { value: "ProviderID", label: "Provider ID" },
+                    { value: "EmrID", label: "EMR ID" }
+                ]
+            }
+        },
+        {
+            key: "state_province",
+            type: "string",
+            label: "State/Province",
+            description: "Key field for updating, Required field - State/province matches dropdown values",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "license_number",
+            type: "string",
+            label: "License Number",
+            description: "Key field for updating - Maximum 50 characters"
+        },
+        // License Details
+        {
+            key: "name_as_appears_on_license",
+            type: "string",
+            label: "Name as Appears on License",
+            description: "Key field for updating - Maximum 50 characters"
+        },
+        {
+            key: "issue_date",
+            type: "date",
+            label: "Issue Date",
+            description: "Key field for updating - Must be m/d/yyyy format and before Expires On date"
+        },
+        {
+            key: "expires_on",
+            type: "date",
+            label: "Expires On",
+            description: "Key field for updating - Must be m/d/yyyy format and after Issue Date"
+        },
+        // Configuration Options
+        {
+            key: "monitor_expiration_date",
+            type: "enum",
+            label: "Monitor Expiration Date",
+            description: "T or F only if provided",
+            config: {
+                options: [
+                    { value: "T", label: "T" },
+                    { value: "F", label: "F" }
+                ]
+            }
+        },
+        {
+            key: "record_viewable_by_provider",
+            type: "enum",
+            label: "Record Viewable by Provider",
+            description: "T or F only if provided",
+            config: {
+                options: [
+                    { value: "T", label: "T" },
+                    { value: "F", label: "F" }
+                ]
+            }
+        },
+        {
+            key: "file_viewable_by_provider",
+            type: "enum",
+            label: "File Viewable by Provider",
+            description: "T or F only if provided",
+            config: {
+                options: [
+                    { value: "T", label: "T" },
+                    { value: "F", label: "F" }
+                ]
+            }
+        },
+        // File Management
+        {
+            key: "file_key",
+            type: "string",
+            label: "File Key",
+            description: "GUID format: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX (8,4,4,4,12 characters)"
+        },
+        // Additional Information
+        {
+            key: "note",
+            type: "string",
+            label: "Note",
+            description: "Maximum 10,000 characters"
+        },
+        {
+            key: "user",
+            type: "string",
+            label: "User",
+            description: "If empty, 'Credentialing System' will be used - must match Cred Spec emails"
+        },
+        {
+            key: "timestamp",
+            type: "date",
+            label: "TimeStamp",
+            description: "Must be m/d/yyyy format"
+        },
+        // Standard X1-X10 Custom Fields
+        {
+            key: 'x1',
+            type: 'string',
+            label: 'X1',
+            description: 'Custom field 1 for extensibility'
+        },
+        {
+            key: 'x2',
+            type: 'string',
+            label: 'X2',
+            description: 'Custom field 2 for extensibility'
+        },
+        {
+            key: 'x3',
+            type: 'string',
+            label: 'X3',
+            description: 'Custom field 3 for extensibility'
+        },
+        {
+            key: 'x4',
+            type: 'string',
+            label: 'X4',
+            description: 'Custom field 4 for extensibility'
+        },
+        {
+            key: 'x5',
+            type: 'string',
+            label: 'X5',
+            description: 'Custom field 5 for extensibility'
+        },
+        {
+            key: 'x6',
+            type: 'string',
+            label: 'X6',
+            description: 'Custom field 6 for extensibility'
+        },
+        {
+            key: 'x7',
+            type: 'string',
+            label: 'X7',
+            description: 'Custom field 7 for extensibility'
+        },
+        {
+            key: 'x8',
+            type: 'string',
+            label: 'X8',
+            description: 'Custom field 8 for extensibility'
+        },
+        {
+            key: 'x9',
+            type: 'string',
+            label: 'X9',
+            description: 'Custom field 9 for extensibility'
+        },
+        {
+            key: 'x10',
+            type: 'string',
+            label: 'X10',
+            description: 'Custom field 10 for extensibility'
+        }
+    ],
+    actions: [
+        {
+            operation: "validateDriversLicense",
+            mode: "foreground",
+            label: "Validate Driver's License Data",
+            description: "Comprehensive validation of driver's license information with duplicate detection"
+        }
+    ]
+};
+
+
+/***/ }),
+
 /***/ 23519:
 /***/ ((__unused_webpack_module, exports) => {
 
@@ -170574,6 +171475,293 @@ exports.locationSheet = {
 
 /***/ }),
 
+/***/ 99573:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.malpracticeClaimSheet = void 0;
+exports.malpracticeClaimSheet = {
+    name: "Malpractice Claim Import Format",
+    slug: "malpractice_claim",
+    access: ["*"],
+    fields: [
+        // Key Identity Fields
+        {
+            key: "provider_name",
+            type: "string",
+            label: "Provider Name",
+            description: "Dummy Column - Provider identification field"
+        },
+        {
+            key: "external_id",
+            type: "string",
+            label: "External ID",
+            description: "Key field for updating, Required field",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "external_id_type",
+            type: "enum",
+            label: "External ID Type",
+            description: "Key field for updating, Required field",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ],
+            config: {
+                options: [
+                    { value: "NPI", label: "NPI" },
+                    { value: "InternalID", label: "Internal ID" },
+                    { value: "ProviderID", label: "Provider ID" },
+                    { value: "EmrID", label: "EMR ID" }
+                ]
+            }
+        },
+        {
+            key: "organization_name",
+            type: "string",
+            label: "Organization Name",
+            description: "Key field for updating, Required field - Maximum 100 characters",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "reporting_entity",
+            type: "string",
+            label: "Reporting Entity",
+            description: "Key field for updating, Required field - Maximum 100 characters",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        // Claim Details
+        {
+            key: "primary_act_omission",
+            type: "string",
+            label: "Primary Act / Omission",
+            description: "Maximum 500 characters"
+        },
+        {
+            key: "incident_date",
+            type: "date",
+            label: "Incident Date",
+            description: "Key field for updating, Required field - Must be m/d/yyyy format",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "judgment_date",
+            type: "date",
+            label: "Judgment Date",
+            description: "Must be m/d/yyyy format"
+        },
+        {
+            key: "claim_status",
+            type: "enum",
+            label: "Claim Status",
+            description: "Key field for updating - Must match dropdown values",
+            config: {
+                options: [
+                    { value: "Open", label: "Open" },
+                    { value: "Closed", label: "Closed" },
+                    { value: "Settled", label: "Settled" },
+                    { value: "Dismissed", label: "Dismissed" },
+                    { value: "Pending", label: "Pending" }
+                ]
+            }
+        },
+        {
+            key: "case_number",
+            type: "string",
+            label: "Case #",
+            description: "Maximum 50 characters"
+        },
+        // Legal Information
+        {
+            key: "carrier_attorney_statement",
+            type: "string",
+            label: "Carrier / Attorney Statement",
+            description: "Maximum 5,000 characters"
+        },
+        {
+            key: "description_of_judgment",
+            type: "string",
+            label: "Description of Judgment",
+            description: "Maximum 5,000 characters"
+        },
+        // Practitioner and Payment Information
+        {
+            key: "number_of_practitioners",
+            type: "number",
+            label: "# of Practitioners",
+            description: "Must be an integer between 1 and 999"
+        },
+        {
+            key: "total_paid_for_this_practitioner",
+            type: "number",
+            label: "Total Paid for this Practitioner",
+            description: "Cannot exceed $2.1 billion, maximum 12 characters"
+        },
+        {
+            key: "types_of_payment",
+            type: "enum",
+            label: "Types of Payment",
+            description: "Must match dropdown values",
+            config: {
+                options: [
+                    { value: "Settlement", label: "Settlement" },
+                    { value: "Judgment", label: "Judgment" },
+                    { value: "Defense Costs", label: "Defense Costs" },
+                    { value: "Other", label: "Other" }
+                ]
+            }
+        },
+        {
+            key: "payment_results",
+            type: "string",
+            label: "Payment Results",
+            description: "Maximum 5,000 characters"
+        },
+        {
+            key: "payment_date",
+            type: "date",
+            label: "Payment Date",
+            description: "Must be m/d/yyyy format"
+        },
+        {
+            key: "total_paid_for_claim",
+            type: "number",
+            label: "Total Paid for Claim",
+            description: "Cannot exceed $2.1 billion, maximum 12 characters"
+        },
+        {
+            key: "role_in_claim",
+            type: "string",
+            label: "Role in Claim",
+            description: "Maximum 100 characters"
+        },
+        {
+            key: "provider_statement",
+            type: "string",
+            label: "Provider Statement",
+            description: "Maximum 5,000 characters"
+        },
+        // File Management
+        {
+            key: "file_key",
+            type: "string",
+            label: "File Key",
+            description: "GUID format: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX (8,4,4,4,12 characters)"
+        },
+        // Additional Information
+        {
+            key: "note",
+            type: "string",
+            label: "Note",
+            description: "Maximum 10,000 characters"
+        },
+        {
+            key: "user",
+            type: "string",
+            label: "User",
+            description: "If empty, 'Credentialing System' will be used - must match Cred Spec emails"
+        },
+        {
+            key: "timestamp",
+            type: "date",
+            label: "TimeStamp",
+            description: "Must be m/d/yyyy format"
+        },
+        // Standard X1-X10 Custom Fields
+        {
+            key: 'x1',
+            type: 'string',
+            label: 'X1',
+            description: 'Custom field 1 for extensibility'
+        },
+        {
+            key: 'x2',
+            type: 'string',
+            label: 'X2',
+            description: 'Custom field 2 for extensibility'
+        },
+        {
+            key: 'x3',
+            type: 'string',
+            label: 'X3',
+            description: 'Custom field 3 for extensibility'
+        },
+        {
+            key: 'x4',
+            type: 'string',
+            label: 'X4',
+            description: 'Custom field 4 for extensibility'
+        },
+        {
+            key: 'x5',
+            type: 'string',
+            label: 'X5',
+            description: 'Custom field 5 for extensibility'
+        },
+        {
+            key: 'x6',
+            type: 'string',
+            label: 'X6',
+            description: 'Custom field 6 for extensibility'
+        },
+        {
+            key: 'x7',
+            type: 'string',
+            label: 'X7',
+            description: 'Custom field 7 for extensibility'
+        },
+        {
+            key: 'x8',
+            type: 'string',
+            label: 'X8',
+            description: 'Custom field 8 for extensibility'
+        },
+        {
+            key: 'x9',
+            type: 'string',
+            label: 'X9',
+            description: 'Custom field 9 for extensibility'
+        },
+        {
+            key: 'x10',
+            type: 'string',
+            label: 'X10',
+            description: 'Custom field 10 for extensibility'
+        }
+    ],
+    actions: [
+        {
+            operation: "validateMalpracticeClaim",
+            mode: "foreground",
+            label: "Validate Malpractice Claim Data",
+            description: "Comprehensive validation of malpractice claim information with duplicate detection"
+        }
+    ]
+};
+
+
+/***/ }),
+
 /***/ 99403:
 /***/ ((__unused_webpack_module, exports) => {
 
@@ -171565,6 +172753,580 @@ exports.payerSheet = {
 
 /***/ }),
 
+/***/ 59047:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.personalReferenceSheet = void 0;
+exports.personalReferenceSheet = {
+    name: "Personal Reference Import Format",
+    slug: "personal_reference",
+    access: ["*"],
+    fields: [
+        // Key Identity Fields
+        {
+            key: "provider_name",
+            type: "string",
+            label: "Provider Name",
+            description: "Dummy Field - Provider identification field"
+        },
+        {
+            key: "external_id",
+            type: "string",
+            label: "External ID",
+            description: "Key field for updating, Required field",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "external_id_type",
+            type: "enum",
+            label: "External ID Type",
+            description: "Key field for updating, Required field",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ],
+            config: {
+                options: [
+                    { value: "NPI", label: "NPI" },
+                    { value: "InternalID", label: "Internal ID" },
+                    { value: "ProviderID", label: "Provider ID" },
+                    { value: "EmrID", label: "EMR ID" }
+                ]
+            }
+        },
+        {
+            key: "full_name",
+            type: "string",
+            label: "Full Name",
+            description: "Key field for updating, Required field - Maximum 100 characters",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "relationship",
+            type: "string",
+            label: "Relationship",
+            description: "Key field for updating - Maximum 100 characters"
+        },
+        // Contact Information
+        {
+            key: "phone_number",
+            type: "string",
+            label: "Phone Number",
+            description: "Must be 9, 10, or 12 digits only - no formatting allowed"
+        },
+        {
+            key: "ext",
+            type: "string",
+            label: "Ext.",
+            description: "Extension - Must be a number up to 20 digits in length"
+        },
+        {
+            key: "email",
+            type: "string",
+            label: "Email",
+            description: "Must adhere to username@domain.com format"
+        },
+        {
+            key: "fax",
+            type: "string",
+            label: "Fax",
+            description: "Must be 9, 10, or 12 digits only - no formatting allowed"
+        },
+        // Address Information
+        {
+            key: "address_line_1",
+            type: "string",
+            label: "Address Line 1",
+            description: "Maximum 100 characters"
+        },
+        {
+            key: "address_line_2",
+            type: "string",
+            label: "Address Line 2",
+            description: "Maximum 50 characters"
+        },
+        {
+            key: "city",
+            type: "string",
+            label: "City",
+            description: "Maximum 50 characters"
+        },
+        {
+            key: "county",
+            type: "string",
+            label: "County",
+            description: "Maximum 100 characters"
+        },
+        {
+            key: "state",
+            type: "string",
+            label: "State",
+            description: "Maximum 50 characters - must be valid for country, no non-ASCII characters"
+        },
+        {
+            key: "zip",
+            type: "string",
+            label: "Zip",
+            description: "Maximum 10 alphanumeric characters"
+        },
+        {
+            key: "country",
+            type: "string",
+            label: "Country",
+            description: "Must appear in company settings with Display = 'y'"
+        },
+        // Viewability Configuration
+        {
+            key: "record_viewable_by_provider",
+            type: "enum",
+            label: "Record Viewable by Provider",
+            description: "T or F only if provided - consumes company default if blank on ADD",
+            config: {
+                options: [
+                    { value: "T", label: "T" },
+                    { value: "F", label: "F" }
+                ]
+            }
+        },
+        {
+            key: "file_viewable_by_provider",
+            type: "enum",
+            label: "File Viewable by Provider",
+            description: "T or F only if provided - consumes company default if blank on ADD",
+            config: {
+                options: [
+                    { value: "T", label: "T" },
+                    { value: "F", label: "F" }
+                ]
+            }
+        },
+        // File Management
+        {
+            key: "file_key",
+            type: "string",
+            label: "File Key",
+            description: "GUID format: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX (8,4,4,4,12 characters)"
+        },
+        // Date Range
+        {
+            key: "from",
+            type: "date",
+            label: "From",
+            description: "Must be m/d/yyyy format and <= To date"
+        },
+        {
+            key: "to",
+            type: "date",
+            label: "To",
+            description: "Must be m/d/yyyy format and >= From date"
+        },
+        // Status
+        {
+            key: "active",
+            type: "enum",
+            label: "Active",
+            description: "T or F only if provided - defaults to T if blank on ADD",
+            config: {
+                options: [
+                    { value: "T", label: "T" },
+                    { value: "F", label: "F" }
+                ]
+            }
+        },
+        // Standard X1-X10 Custom Fields
+        {
+            key: 'x1',
+            type: 'string',
+            label: 'X1',
+            description: 'Custom field 1 for extensibility'
+        },
+        {
+            key: 'x2',
+            type: 'string',
+            label: 'X2',
+            description: 'Custom field 2 for extensibility'
+        },
+        {
+            key: 'x3',
+            type: 'string',
+            label: 'X3',
+            description: 'Custom field 3 for extensibility'
+        },
+        {
+            key: 'x4',
+            type: 'string',
+            label: 'X4',
+            description: 'Custom field 4 for extensibility'
+        },
+        {
+            key: 'x5',
+            type: 'string',
+            label: 'X5',
+            description: 'Custom field 5 for extensibility'
+        },
+        {
+            key: 'x6',
+            type: 'string',
+            label: 'X6',
+            description: 'Custom field 6 for extensibility'
+        },
+        {
+            key: 'x7',
+            type: 'string',
+            label: 'X7',
+            description: 'Custom field 7 for extensibility'
+        },
+        {
+            key: 'x8',
+            type: 'string',
+            label: 'X8',
+            description: 'Custom field 8 for extensibility'
+        },
+        {
+            key: 'x9',
+            type: 'string',
+            label: 'X9',
+            description: 'Custom field 9 for extensibility'
+        },
+        {
+            key: 'x10',
+            type: 'string',
+            label: 'X10',
+            description: 'Custom field 10 for extensibility'
+        }
+    ],
+    actions: [
+        {
+            operation: "validatePersonalReference",
+            mode: "foreground",
+            label: "Validate Personal Reference Data",
+            description: "Comprehensive validation of personal reference information with duplicate detection"
+        }
+    ]
+};
+
+
+/***/ }),
+
+/***/ 16031:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.professionalTrainingSheet = exports.yesNoEnum = exports.trueFalseEnum = exports.trainingStatusEnum = exports.trainingTypeEnum = exports.externalIdTypeEnum = void 0;
+// External ID Type enumeration for Professional Training Import Format
+exports.externalIdTypeEnum = [
+    { value: "NPI", label: "NPI" },
+    { value: "InternalID", label: "InternalID" },
+    { value: "ProviderID", label: "ProviderID" },
+    { value: "EmrID", label: "EmrID" },
+    { value: "BillingSystemID", label: "BillingSystemID" }
+];
+// Training Type enumeration
+exports.trainingTypeEnum = [
+    { value: "Internship", label: "Internship" },
+    { value: "Residency", label: "Residency" },
+    { value: "Internship/Residency", label: "Internship/Residency" },
+    { value: "Chief Residency", label: "Chief Residency" },
+    { value: "Fellowship", label: "Fellowship" },
+    { value: "Post Doctoral Fellowship", label: "Post Doctoral Fellowship" },
+    { value: "Faculty Position/Academic Employment", label: "Faculty Position/Academic Employment" },
+    { value: "Other", label: "Other" }
+];
+// Training Status enumeration
+exports.trainingStatusEnum = [
+    { value: "", label: "" },
+    { value: "Completed", label: "Completed" },
+    { value: "Enrolled", label: "Enrolled" },
+    { value: "In Progress", label: "In Progress" },
+    { value: "Not Completed", label: "Not Completed" }
+];
+// T/F enumeration for viewability and ACGME fields
+exports.trueFalseEnum = [
+    { value: "", label: "" },
+    { value: "T", label: "T" },
+    { value: "F", label: "F" }
+];
+// Y/N enumeration for Ignore Required Fields Validation
+exports.yesNoEnum = [
+    { value: "", label: "" },
+    { value: "Y", label: "Y" },
+    { value: "N", label: "N" }
+];
+// Professional Training Import Format sheet configuration
+exports.professionalTrainingSheet = {
+    name: "Professional Training Import Format",
+    slug: "professional_training",
+    access: ["*"],
+    fields: [
+        // Key Fields - Required
+        {
+            key: "provider_name",
+            type: "string",
+            label: "Provider Name",
+            description: "Dummy field for provider identification"
+        },
+        {
+            key: "external_id",
+            type: "string",
+            label: "External ID",
+            description: "Required field - Key field for updating",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "external_id_type",
+            type: "enum",
+            label: "External ID Type",
+            description: "Required field - Key field for updating. Must be one of: NPI, InternalID, ProviderID, EmrID, BillingSystemID",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ],
+            config: {
+                options: exports.externalIdTypeEnum
+            }
+        },
+        {
+            key: "training_type",
+            type: "enum",
+            label: "Training Type",
+            description: "Required field - Key field for updating. Must match dropdown values",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ],
+            config: {
+                options: exports.trainingTypeEnum
+            }
+        },
+        {
+            key: "department_program",
+            type: "string",
+            label: "Department / Program",
+            description: "Key field for updating - Max 100 characters"
+        },
+        {
+            key: "specialty",
+            type: "string",
+            label: "Specialty",
+            description: "Key field for updating - Max 100 characters. Must exist in Setup > List Management > Specialty"
+        },
+        // Institution Information
+        {
+            key: "institution_hospital_name",
+            type: "string",
+            label: "Institution / Hospital Name",
+            description: "Key field for updating"
+        },
+        {
+            key: "institution_email",
+            type: "string",
+            label: "Institution Email",
+            description: "Must adhere to username@domain.com format"
+        },
+        {
+            key: "address_line_1",
+            type: "string",
+            label: "Address Line 1",
+            description: "Max 100 characters"
+        },
+        {
+            key: "address_line_2",
+            type: "string",
+            label: "Address Line 2",
+            description: "Max 50 characters"
+        },
+        {
+            key: "city",
+            type: "string",
+            label: "City",
+            description: "Max 50 characters"
+        },
+        {
+            key: "state",
+            type: "string",
+            label: "State",
+            description: "Max 50 characters, no non-ASCII characters, must match subdivision dropdown"
+        },
+        {
+            key: "zip",
+            type: "string",
+            label: "Zip",
+            description: "Must be 5, 6, or 9 digits"
+        },
+        {
+            key: "country",
+            type: "string",
+            label: "Country",
+            description: "Max 100 characters, must match Country dropdown"
+        },
+        // Contact Information
+        {
+            key: "institution_phone_number",
+            type: "string",
+            label: "Institution Phone Number",
+            description: "Must be 9, 10, or 12 digits only (no formatting)"
+        },
+        {
+            key: "ext",
+            type: "string",
+            label: "Ext.",
+            description: "Must be a number up to 20 digits in length"
+        },
+        {
+            key: "fax",
+            type: "string",
+            label: "Fax",
+            description: "Must be 9, 10, or 12 digits only (no formatting)"
+        },
+        // Director Information
+        {
+            key: "directors_name",
+            type: "string",
+            label: "Director's Name",
+            description: "Key field for updating - Max 100 characters"
+        },
+        {
+            key: "phone_number",
+            type: "string",
+            label: "Phone Number",
+            description: "Key field for updating - Must be 9, 10, or 12 digits only (no formatting)"
+        },
+        {
+            key: "email",
+            type: "string",
+            label: "Email",
+            description: "Must adhere to username@domain.com format"
+        },
+        // Training Dates and Status
+        {
+            key: "start_date",
+            type: "string",
+            label: "Start Date",
+            description: "Must be formatted as m/d/yyyy"
+        },
+        {
+            key: "end_date",
+            type: "string",
+            label: "End Date",
+            description: "Must be formatted as m/d/yyyy"
+        },
+        {
+            key: "training_status",
+            type: "enum",
+            label: "Training Status",
+            description: "Optional - Must be: Completed / Enrolled / In Progress / Not Completed",
+            config: {
+                options: exports.trainingStatusEnum
+            }
+        },
+        {
+            key: "anticipated_completion_date",
+            type: "string",
+            label: "Anticipated Completion Date",
+            description: "Must be formatted as m/d/yyyy"
+        },
+        // Configuration Fields
+        {
+            key: "record_viewable_by_provider",
+            type: "enum",
+            label: "Record Viewable by Provider",
+            description: "Must be T or F if provided",
+            config: {
+                options: exports.trueFalseEnum
+            }
+        },
+        {
+            key: "acgme",
+            type: "enum",
+            label: "ACGME",
+            description: "Must be T, F, or NULL if provided",
+            config: {
+                options: exports.trueFalseEnum
+            }
+        },
+        {
+            key: "website",
+            type: "string",
+            label: "Website",
+            description: "Must be valid URL format - Max 500 characters"
+        },
+        {
+            key: "file_viewable_by_provider",
+            type: "enum",
+            label: "File Viewable by Provider",
+            description: "Must be T or F if provided",
+            config: {
+                options: exports.trueFalseEnum
+            }
+        },
+        {
+            key: "ignore_required_fields_validation",
+            type: "enum",
+            label: "Ignore Required Fields Validation?",
+            description: "Must be Y or N if provided",
+            config: {
+                options: exports.yesNoEnum
+            }
+        },
+        // File and System Fields
+        {
+            key: "file_key",
+            type: "string",
+            label: "File Key",
+            description: "Must be valid GUID format (XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)"
+        },
+        {
+            key: "note",
+            type: "string",
+            label: "Note",
+            description: "Max 10,000 characters"
+        },
+        {
+            key: "user",
+            type: "string",
+            label: "User",
+            description: "Must validate against Cred Spec emails. Defaults to 'Credentialing System' if empty"
+        },
+        {
+            key: "timestamp",
+            type: "string",
+            label: "TimeStamp",
+            description: "Must be formatted as m/d/yyyy"
+        }
+    ],
+    actions: [
+        {
+            operation: "professionalTrainingValidateAction",
+            mode: "background",
+            label: "Validate Professional Training Data",
+            description: "Run comprehensive validation on Professional Training Import Format data including provider matching, specialty validation, and training type verification"
+        }
+    ]
+};
+
+
+/***/ }),
+
 /***/ 1232:
 /***/ ((__unused_webpack_module, exports) => {
 
@@ -172246,6 +174008,150 @@ exports.providerPayerEnrollmentDatesSheet = {
 
 /***/ }),
 
+/***/ 34297:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.providerPrivilegesSheet = exports.yesNoEnum = exports.externalIdTypeEnum = void 0;
+// External ID Type enumeration for Provider Privileges Import Format
+exports.externalIdTypeEnum = [
+    { value: "NPI", label: "NPI" },
+    { value: "InternalID", label: "InternalID" },
+    { value: "ProviderID", label: "ProviderID" },
+    { value: "EmrID", label: "EmrID" },
+    { value: "BillingSystemID", label: "BillingSystemID" }
+];
+// Y/N enumeration for Ignore Required Fields Validation
+exports.yesNoEnum = [
+    { value: "Y", label: "Y" },
+    { value: "N", label: "N" }
+];
+// Provider Privileges Import Format sheet configuration
+exports.providerPrivilegesSheet = {
+    name: "Provider Privileges Import Format",
+    slug: "provider_privileges",
+    access: ["*"],
+    fields: [
+        // Dummy and Key Fields
+        {
+            key: "provider_name",
+            type: "string",
+            label: "Provider Name",
+            description: "Dummy field for provider identification"
+        },
+        {
+            key: "external_id",
+            type: "string",
+            label: "External ID",
+            description: "Required field - Key field for updating",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "external_id_type",
+            type: "enum",
+            label: "External ID Type",
+            description: "Required field - Key field for updating. Must be one of: NPI, InternalID, ProviderID, EmrID, BillingSystemID",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ],
+            config: {
+                options: exports.externalIdTypeEnum
+            }
+        },
+        {
+            key: "location_name",
+            type: "string",
+            label: "Location Name",
+            description: "Dummy field for location identification"
+        },
+        {
+            key: "location_key",
+            type: "string",
+            label: "Location Key",
+            description: "Required field - Key field for updating. Must be valid GUID format (XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "privilege_name",
+            type: "string",
+            label: "Privilege Name",
+            description: "Required field - Key field for updating. Must match existing Privilege Name within the Company",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        // Optional Fields
+        {
+            key: "conditions",
+            type: "string",
+            label: "Conditions",
+            description: "Optional - Max 10,000 characters"
+        },
+        {
+            key: "appt_date",
+            type: "string",
+            label: "Appt. Date",
+            description: "Required when Status is 'Approved'. Must be formatted as m/d/yyyy"
+        },
+        {
+            key: "reappt_date",
+            type: "string",
+            label: "Reappt. Date",
+            description: "Required when Status is 'Approved'. Must be formatted as m/d/yyyy and after Appt. Date"
+        },
+        {
+            key: "status",
+            type: "string",
+            label: "Status",
+            description: "Optional - Must match a value in the company's Privilege Status configurable list"
+        },
+        {
+            key: "granted_by",
+            type: "string",
+            label: "Granted By",
+            description: "Optional - Must match a name in the Privileges Granted By configurable list"
+        },
+        {
+            key: "ignore_required_fields_validation",
+            type: "enum",
+            label: "Ignore Required Fields Validation?",
+            description: "Optional - Must be Y or N if provided",
+            config: {
+                options: [
+                    { value: "", label: "" },
+                    { value: "Y", label: "Y" },
+                    { value: "N", label: "N" }
+                ]
+            }
+        }
+    ],
+    actions: [
+        {
+            operation: "providerPrivilegesValidateAction",
+            mode: "background",
+            label: "Validate Provider Privileges Data",
+            description: "Run comprehensive validation on Provider Privileges Import Format data including provider matching, location validation, and privilege assignment verification"
+        }
+    ]
+};
+
+
+/***/ }),
+
 /***/ 39085:
 /***/ ((__unused_webpack_module, exports) => {
 
@@ -172659,11 +174565,17 @@ const provider_appointment_dates_sheet_1 = __nccwpck_require__(1232);
 const provider_location_details_sheet_1 = __nccwpck_require__(82499);
 const provider_payer_enrollment_dates_sheet_1 = __nccwpck_require__(45177);
 const location_sheet_1 = __nccwpck_require__(73186);
+const drivers_license_sheet_1 = __nccwpck_require__(31043);
+const malpractice_claim_sheet_1 = __nccwpck_require__(99573);
+const personal_reference_sheet_1 = __nccwpck_require__(59047);
+const company_privileges_sheet_1 = __nccwpck_require__(9930);
+const provider_privileges_sheet_1 = __nccwpck_require__(34297);
+const professional_training_sheet_1 = __nccwpck_require__(16031);
 exports.companyWorkbook = {
     name: "Company Workbook",
     namespace: "workbook:qgenda-company",
     labels: ["pinned"],
-    sheets: [users_sheet_1.usersSheet, demographic_sheet_1.demographicSheet, demographic_v2_sheet_1.demographicV2Sheet, demographic_reference_sheet_1.demographicReferenceSheet, state_license_sheet_1.stateLicenseSheet, dea_license_sheet_1.deaLicenseSheet, affiliation_sheet_1.affiliationSheet, board_certification_sheet_1.boardCertificationSheet, other_certification_sheet_1.otherCertificationSheet, malpractice_insurance_sheet_1.malpracticeInsuranceSheet, education_gap_sheet_1.educationGapSheet, payer_locations_sheet_1.payerLocationsSheet, payer_sheet_1.payerSheet, cds_certificate_sheet_1.cdsCertificateSheet, cme_sheet_1.cmeSheet, education_sheet_1.educationSheet, provider_appointment_dates_sheet_1.providerAppointmentDatesSheet, provider_location_details_sheet_1.providerLocationDetailsSheet, provider_payer_enrollment_dates_sheet_1.providerPayerEnrollmentDatesSheet, location_sheet_1.locationSheet],
+    sheets: [users_sheet_1.usersSheet, demographic_sheet_1.demographicSheet, demographic_v2_sheet_1.demographicV2Sheet, demographic_reference_sheet_1.demographicReferenceSheet, state_license_sheet_1.stateLicenseSheet, dea_license_sheet_1.deaLicenseSheet, affiliation_sheet_1.affiliationSheet, board_certification_sheet_1.boardCertificationSheet, other_certification_sheet_1.otherCertificationSheet, malpractice_insurance_sheet_1.malpracticeInsuranceSheet, education_gap_sheet_1.educationGapSheet, payer_locations_sheet_1.payerLocationsSheet, payer_sheet_1.payerSheet, cds_certificate_sheet_1.cdsCertificateSheet, cme_sheet_1.cmeSheet, education_sheet_1.educationSheet, provider_appointment_dates_sheet_1.providerAppointmentDatesSheet, provider_location_details_sheet_1.providerLocationDetailsSheet, provider_payer_enrollment_dates_sheet_1.providerPayerEnrollmentDatesSheet, location_sheet_1.locationSheet, drivers_license_sheet_1.driversLicenseSheet, malpractice_claim_sheet_1.malpracticeClaimSheet, personal_reference_sheet_1.personalReferenceSheet, company_privileges_sheet_1.companyPrivilegesSheet, provider_privileges_sheet_1.providerPrivilegesSheet, professional_training_sheet_1.professionalTrainingSheet],
     actions: [{
             operation: "downloadWorkbook",
             mode: "foreground",
@@ -172728,6 +174640,18 @@ const provider_payer_enrollment_dates_validation_listener_1 = __nccwpck_require_
 const validate_provider_payer_enrollment_dates_action_1 = __nccwpck_require__(97818);
 const location_validation_listener_1 = __nccwpck_require__(91780);
 const validate_location_action_1 = __nccwpck_require__(91248);
+const drivers_license_validation_listener_1 = __nccwpck_require__(15934);
+const validate_drivers_license_action_1 = __nccwpck_require__(7029);
+const malpractice_claim_validation_listener_1 = __nccwpck_require__(51358);
+const validate_malpractice_claim_action_1 = __nccwpck_require__(91062);
+const personal_reference_validation_listener_1 = __nccwpck_require__(48749);
+const personal_reference_batch_validation_action_1 = __nccwpck_require__(15316);
+const company_privileges_validation_listener_1 = __nccwpck_require__(48695);
+const company_privileges_batch_validation_action_1 = __nccwpck_require__(84080);
+const provider_privileges_validation_listener_1 = __nccwpck_require__(73499);
+const provider_privileges_batch_validation_action_1 = __nccwpck_require__(50901);
+const professional_training_validation_listener_1 = __nccwpck_require__(89897);
+const company_professional_training_batch_validation_action_1 = __nccwpck_require__(93853);
 function default_1(listener) {
     // Generate field mappings dynamically from sheet configurations
     const fieldMappings = (0, field_mappings_1.generateFieldMappings)();
@@ -172777,6 +174701,18 @@ function default_1(listener) {
     listener.use(validate_provider_payer_enrollment_dates_action_1.validateProviderPayerEnrollmentDatesAction);
     listener.use(location_validation_listener_1.locationValidationHook);
     listener.use(validate_location_action_1.validateLocationAction);
+    listener.use(drivers_license_validation_listener_1.driversLicenseValidationHook);
+    listener.use(validate_drivers_license_action_1.validateDriversLicenseAction);
+    listener.use(malpractice_claim_validation_listener_1.malpracticeClaimValidationHook);
+    listener.use(validate_malpractice_claim_action_1.validateMalpracticeClaimAction);
+    listener.use(personal_reference_validation_listener_1.personalReferenceValidationHook);
+    (0, personal_reference_batch_validation_action_1.personalReferenceBatchValidationHook)(listener);
+    listener.use(company_privileges_validation_listener_1.companyPrivilegesValidationHook);
+    (0, company_privileges_batch_validation_action_1.companyPrivilegesBatchValidationHook)(listener);
+    listener.use(provider_privileges_validation_listener_1.providerPrivilegesValidationHook);
+    (0, provider_privileges_batch_validation_action_1.providerPrivilegesBatchValidationHook)(listener);
+    listener.use(professional_training_validation_listener_1.professionalTrainingValidationHook);
+    (0, company_professional_training_batch_validation_action_1.companyProfessionalTrainingBatchValidationAction)(listener);
     listener.use(debug_spaces_listener_1.debugSpacesListener); // Add debug listener
     // Add malpractice insurance deduplication action
     (0, malpractice_deduplication_action_1.malpracticeDeduplicationAction)(listener);
@@ -173315,6 +175251,545 @@ const cmeValidationHook = (listener) => {
     }));
 };
 exports.cmeValidationHook = cmeValidationHook;
+
+
+/***/ }),
+
+/***/ 84080:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.companyPrivilegesBatchValidationHook = void 0;
+const api_1 = __importDefault(__nccwpck_require__(45055));
+const companyPrivilegesBatchValidationHook = (listener) => {
+    listener.filter({ job: "workbook:companyPrivilegesValidateAction" }, (configure) => {
+        configure.on("job:ready", async (event) => {
+            const { jobId, spaceId } = event.context;
+            try {
+                await api_1.default.jobs.ack(jobId, {
+                    info: "Starting Company Privileges batch validation...",
+                    progress: 10,
+                });
+                const sheets = await api_1.default.sheets.list({ workbookId: event.context.workbookId });
+                const companyPrivilegesSheet = sheets.data.find(sheet => sheet.config.slug === "company_privileges");
+                if (!companyPrivilegesSheet) {
+                    throw new Error("Company Privileges sheet not found");
+                }
+                await api_1.default.jobs.ack(jobId, {
+                    info: "Loading Company Privileges records...",
+                    progress: 20,
+                });
+                const records = await api_1.default.records.get(companyPrivilegesSheet.id);
+                let totalErrors = 0;
+                let totalWarnings = 0;
+                let totalRecords = records.data.records?.length || 0;
+                // Track duplicate ICD/CPT codes within file
+                const icdCptCodeMap = new Map();
+                await api_1.default.jobs.ack(jobId, {
+                    info: "Validating duplicate ICD/CPT codes...",
+                    progress: 40,
+                });
+                // First pass: collect all ICD/CPT codes for duplicate checking
+                records.data.records?.forEach((record, index) => {
+                    const icdCptCode = record.values?.icd_cpt_code?.value;
+                    if (icdCptCode && icdCptCode.trim()) {
+                        const key = icdCptCode.trim().toLowerCase();
+                        if (!icdCptCodeMap.has(key)) {
+                            icdCptCodeMap.set(key, []);
+                        }
+                        icdCptCodeMap.get(key).push(index);
+                    }
+                });
+                await api_1.default.jobs.ack(jobId, {
+                    info: "Processing business rule validations...",
+                    progress: 60,
+                });
+                // Second pass: apply duplicate validations and other business rules
+                const recordUpdates = [];
+                records.data.records?.forEach((record, index) => {
+                    const recordUpdate = {
+                        id: record.id,
+                        values: { ...record.values }
+                    };
+                    let hasUpdates = false;
+                    const privilegeName = record.values?.privilege_name?.value;
+                    const icdCptCode = record.values?.icd_cpt_code?.value;
+                    const specialty = record.values?.specialty?.value;
+                    const subspecialty = record.values?.subspecialty?.value;
+                    // Duplicate ICD/CPT Code validation within file
+                    if (icdCptCode && icdCptCode.trim()) {
+                        const key = icdCptCode.trim().toLowerCase();
+                        const duplicateIndices = icdCptCodeMap.get(key) || [];
+                        if (duplicateIndices.length > 1) {
+                            recordUpdate.values.icd_cpt_code = {
+                                ...record.values.icd_cpt_code,
+                                messages: [
+                                    ...(record.values.icd_cpt_code.messages || []),
+                                    {
+                                        type: "warn",
+                                        message: `ICD/CPT Code not unique - found in rows: ${duplicateIndices.map(i => i + 1).join(", ")}`
+                                    }
+                                ]
+                            };
+                            hasUpdates = true;
+                            totalWarnings++;
+                        }
+                    }
+                    // Privilege Name business rules
+                    if (privilegeName && privilegeName.trim()) {
+                        const name = privilegeName.trim();
+                        // Check for duplicate privilege names (business warning)
+                        // This would typically check against existing privileges in the system
+                        if (name.toLowerCase().includes('test') || name.toLowerCase().includes('sample')) {
+                            recordUpdate.values.privilege_name = {
+                                ...record.values.privilege_name,
+                                messages: [
+                                    ...(record.values.privilege_name.messages || []),
+                                    {
+                                        type: "warn",
+                                        message: "Privilege name appears to be a test record - verify this is intended for production"
+                                    }
+                                ]
+                            };
+                            hasUpdates = true;
+                            totalWarnings++;
+                        }
+                    }
+                    // Specialty validation against standard medical specialties
+                    if (specialty && specialty.trim()) {
+                        const specialtyValues = specialty.split("|").map(s => s.trim()).filter(s => s.length > 0);
+                        // Common medical specialties for basic validation
+                        const commonSpecialties = [
+                            'anesthesiology', 'cardiology', 'dermatology', 'emergency medicine',
+                            'endocrinology', 'family medicine', 'gastroenterology', 'hematology',
+                            'infectious disease', 'internal medicine', 'nephrology', 'neurology',
+                            'obstetrics and gynecology', 'oncology', 'ophthalmology', 'orthopedics',
+                            'otolaryngology', 'pathology', 'pediatrics', 'psychiatry', 'pulmonology',
+                            'radiology', 'rheumatology', 'surgery', 'urology'
+                        ];
+                        const invalidSpecialties = [];
+                        specialtyValues.forEach(spec => {
+                            const normalizedSpec = spec.toLowerCase().trim();
+                            const isValidSpecialty = commonSpecialties.some(common => normalizedSpec.includes(common) || common.includes(normalizedSpec));
+                            if (!isValidSpecialty && spec.length > 2) {
+                                invalidSpecialties.push(spec);
+                            }
+                        });
+                        if (invalidSpecialties.length > 0) {
+                            recordUpdate.values.specialty = {
+                                ...record.values.specialty,
+                                messages: [
+                                    ...(record.values.specialty.messages || []),
+                                    {
+                                        type: "warn",
+                                        message: `Specialty values may need verification: ${invalidSpecialties.join(", ")}`
+                                    }
+                                ]
+                            };
+                            hasUpdates = true;
+                            totalWarnings++;
+                        }
+                    }
+                    // Subspecialty validation
+                    if (subspecialty && subspecialty.trim()) {
+                        const subspecialtyValues = subspecialty.split("|").map(s => s.trim()).filter(s => s.length > 0);
+                        // Check for common subspecialty patterns
+                        subspecialtyValues.forEach(subspec => {
+                            if (subspec.length > 0 && subspec.length < 3) {
+                                recordUpdate.values.subspecialty = {
+                                    ...record.values.subspecialty,
+                                    messages: [
+                                        ...(record.values.subspecialty?.messages || []),
+                                        {
+                                            type: "warn",
+                                            message: `Subspecialty value "${subspec}" appears unusually short - verify accuracy`
+                                        }
+                                    ]
+                                };
+                                hasUpdates = true;
+                                totalWarnings++;
+                            }
+                        });
+                    }
+                    // ICD/CPT Code format validation
+                    if (icdCptCode && icdCptCode.trim()) {
+                        const code = icdCptCode.trim().toUpperCase();
+                        // Basic ICD-10 and CPT format checking
+                        const icd10Pattern = /^[A-Z]\d{2}(\.\d{1,3})?$/; // Basic ICD-10 pattern
+                        const cptPattern = /^\d{5}$/; // Basic CPT pattern
+                        const hcpcsPattern = /^[A-Z]\d{4}$/; // Basic HCPCS pattern
+                        if (!icd10Pattern.test(code) && !cptPattern.test(code) && !hcpcsPattern.test(code)) {
+                            recordUpdate.values.icd_cpt_code = {
+                                ...record.values.icd_cpt_code,
+                                messages: [
+                                    ...(record.values.icd_cpt_code?.messages || []),
+                                    {
+                                        type: "warn",
+                                        message: "ICD/CPT Code format may not match standard ICD-10, CPT, or HCPCS patterns"
+                                    }
+                                ]
+                            };
+                            hasUpdates = true;
+                            totalWarnings++;
+                        }
+                    }
+                    if (hasUpdates) {
+                        recordUpdates.push(recordUpdate);
+                    }
+                });
+                // Apply all record updates in batches
+                if (recordUpdates.length > 0) {
+                    await api_1.default.jobs.ack(jobId, {
+                        info: "Applying validation results...",
+                        progress: 80,
+                    });
+                    const batchSize = 100;
+                    for (let i = 0; i < recordUpdates.length; i += batchSize) {
+                        const batch = recordUpdates.slice(i, i + batchSize);
+                        await api_1.default.records.update(companyPrivilegesSheet.id, batch);
+                    }
+                }
+                // Complete the job
+                await api_1.default.jobs.complete(jobId, {
+                    outcome: {
+                        message: `Company Privileges validation completed. Processed ${totalRecords} records with ${totalErrors} errors and ${totalWarnings} warnings.`,
+                        next: {
+                            type: "wait",
+                        },
+                    },
+                });
+            }
+            catch (error) {
+                console.error("Company Privileges batch validation error:", error);
+                await api_1.default.jobs.fail(jobId, {
+                    outcome: {
+                        message: `Company Privileges validation failed: ${error.message}`,
+                    },
+                });
+            }
+        });
+    });
+};
+exports.companyPrivilegesBatchValidationHook = companyPrivilegesBatchValidationHook;
+
+
+/***/ }),
+
+/***/ 48695:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.companyPrivilegesValidationHook = void 0;
+const plugin_record_hook_1 = __nccwpck_require__(32095);
+const companyPrivilegesValidationHook = (listener) => {
+    listener.use((0, plugin_record_hook_1.recordHook)("company_privileges", (record) => {
+        // Get all field values
+        const privilegeName = record.get("privilege_name");
+        const icdCptCode = record.get("icd_cpt_code");
+        const specialty = record.get("specialty");
+        const subspecialty = record.get("subspecialty");
+        const description = record.get("description");
+        const qualifications = record.get("qualifications");
+        const competency = record.get("competency");
+        const includeInAllLocations = record.get("include_in_all_locations");
+        // Required field validations
+        if (!privilegeName?.trim()) {
+            record.addError("privilege_name", "Privilege Name required");
+        }
+        // Note: ICD/CPT Code and Specialty are now optional fields
+        // Character limit validations
+        if (privilegeName && privilegeName.length > 100) {
+            record.addError("privilege_name", "Privilege Name exceeds character limit of 100");
+        }
+        if (icdCptCode && icdCptCode.length > 50) {
+            record.addError("icd_cpt_code", "ICD/CPT Code exceeds character limit of 50");
+        }
+        // Pipe-delimited field validation for Specialty
+        if (specialty && specialty.trim()) {
+            // Check total character limit including pipes
+            if (specialty.length > 100) {
+                record.addError("specialty", "Specialty exceeds character limit of 100");
+            }
+            // Validate pipe-delimited format
+            const specialtyValues = specialty.split("|").map(s => s.trim()).filter(s => s.length > 0);
+            // Check each specialty value (if any provided)
+            specialtyValues.forEach(spec => {
+                if (spec.length === 0) {
+                    record.addError("specialty", "Empty specialty value found in pipe-delimited list");
+                }
+                // Basic specialty validation - would be enhanced with actual specialty list in production
+                if (spec.length > 50) {
+                    record.addError("specialty", `Individual specialty value "${spec}" exceeds 50 characters`);
+                }
+            });
+        }
+        // Pipe-delimited field validation for Subspecialty
+        if (subspecialty && subspecialty.trim()) {
+            // Check total character limit including pipes
+            if (subspecialty.length > 100) {
+                record.addError("subspecialty", "Subspecialty exceeds character limit of 100");
+            }
+            // Validate pipe-delimited format
+            const subspecialtyValues = subspecialty.split("|").map(s => s.trim()).filter(s => s.length > 0);
+            // Check each subspecialty value
+            subspecialtyValues.forEach(subspec => {
+                if (subspec.length === 0) {
+                    record.addError("subspecialty", "Empty subspecialty value found in pipe-delimited list");
+                }
+                // Basic subspecialty validation - would be enhanced with actual subspecialty list in production
+                if (subspec.length > 50) {
+                    record.addError("subspecialty", `Individual subspecialty value "${subspec}" exceeds 50 characters`);
+                }
+            });
+        }
+        // Large text field validations
+        if (description && description.length > 10000) {
+            record.addError("description", "Description exceeds character limit of 10000");
+        }
+        if (qualifications && qualifications.length > 10000) {
+            record.addError("qualifications", "Qualifications exceeds character limit of 10000");
+        }
+        if (competency && competency.length > 10000) {
+            record.addError("competency", "Competency exceeds character limit of 10000");
+        }
+        // ICD/CPT Code format validation
+        if (icdCptCode && icdCptCode.trim()) {
+            const code = icdCptCode.trim();
+            // Basic format validation - alphanumeric with some special characters
+            const validCodeFormat = /^[A-Za-z0-9\-\.\_]+$/;
+            if (!validCodeFormat.test(code)) {
+                record.addError("icd_cpt_code", "ICD/CPT Code contains invalid characters. Use only letters, numbers, hyphens, periods, and underscores");
+            }
+        }
+        // Privilege Name validation for special characters
+        if (privilegeName && privilegeName.trim()) {
+            // Check for potentially problematic characters
+            const invalidChars = /[<>\"&]/;
+            if (invalidChars.test(privilegeName)) {
+                record.addError("privilege_name", "Privilege Name contains invalid characters: < > \" &");
+            }
+        }
+        // TODO: Production validations that would be implemented:
+        // - Validate specialty values against actual Specialty List Management
+        // - Validate subspecialty values against actual Specialty List Management  
+        // - Cross-reference ICD/CPT codes with medical coding standards
+        // - Validate Include in All Locations against valid options
+        return record;
+    }));
+};
+exports.companyPrivilegesValidationHook = companyPrivilegesValidationHook;
+
+
+/***/ }),
+
+/***/ 93853:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.companyProfessionalTrainingBatchValidationAction = void 0;
+const api_1 = __importDefault(__nccwpck_require__(45055));
+const companyProfessionalTrainingBatchValidationAction = (listener) => {
+    listener.filter({ job: "workbook:company-professional-training-batch-validation" }, (configure) => {
+        configure.on("job:ready", async (event) => {
+            const { jobId, spaceId, workbookId } = event.context;
+            try {
+                const sheets = await api_1.default.sheets.list({ workbookId });
+                const professionalTrainingSheet = sheets.data.find((sheet) => sheet.config.slug === "professional_training");
+                if (!professionalTrainingSheet) {
+                    throw new Error("Professional Training sheet not found");
+                }
+                // Get all records from the Professional Training sheet
+                const response = await api_1.default.records.get(professionalTrainingSheet.id);
+                const records = response.data.records;
+                let processedCount = 0;
+                let errorCount = 0;
+                let warningCount = 0;
+                const batchErrors = [];
+                const batchWarnings = [];
+                // Update job progress
+                await api_1.default.jobs.update(jobId, {
+                    progress: 10,
+                    info: `Starting validation of ${records.length} Professional Training records...`
+                });
+                // Batch validation logic
+                for (let i = 0; i < records.length; i++) {
+                    const record = records[i];
+                    const recordNumber = i + 1;
+                    try {
+                        // Cross-record validations
+                        await performCrossRecordValidations(record, records, recordNumber, batchErrors, batchWarnings);
+                        processedCount++;
+                        // Update progress every 100 records
+                        if (processedCount % 100 === 0) {
+                            await api_1.default.jobs.update(jobId, {
+                                progress: 10 + Math.floor((processedCount / records.length) * 80),
+                                info: `Processed ${processedCount} of ${records.length} records...`
+                            });
+                        }
+                    }
+                    catch (error) {
+                        errorCount++;
+                        batchErrors.push(`Row ${recordNumber}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                    }
+                }
+                // Final validation summary
+                const validRecordsCount = processedCount - errorCount;
+                const completionSummary = [
+                    `Professional Training Batch Validation Complete`,
+                    `Total Records: ${records.length}`,
+                    `Valid Records: ${validRecordsCount}`,
+                    `Records with Errors: ${errorCount}`,
+                    `Records with Warnings: ${warningCount}`,
+                    ``,
+                    `Key Validations Performed:`,
+                    `- External ID and Type validation`,
+                    `- Training Type validation`,
+                    `- Phone/Fax format validation`,
+                    `- Email format validation`,
+                    `- Date format validation`,
+                    `- Character limit validation`,
+                    `- T/F and Y/N value validation`,
+                    `- GUID format validation`,
+                    `- URL format validation`,
+                    `- Cross-record duplicate validation`
+                ];
+                if (batchErrors.length > 0) {
+                    completionSummary.push(``, `Errors Found:`);
+                    completionSummary.push(...batchErrors.slice(0, 50)); // Limit to first 50 errors
+                    if (batchErrors.length > 50) {
+                        completionSummary.push(`... and ${batchErrors.length - 50} more errors`);
+                    }
+                }
+                if (batchWarnings.length > 0) {
+                    completionSummary.push(``, `Warnings Found:`);
+                    completionSummary.push(...batchWarnings.slice(0, 20)); // Limit to first 20 warnings
+                    if (batchWarnings.length > 20) {
+                        completionSummary.push(`... and ${batchWarnings.length - 20} more warnings`);
+                    }
+                }
+                await api_1.default.jobs.complete(jobId, {
+                    outcome: {
+                        message: completionSummary.join('\n'),
+                        acknowledge: true
+                    }
+                });
+            }
+            catch (error) {
+                await api_1.default.jobs.fail(jobId, {
+                    outcome: {
+                        message: `Professional Training batch validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                        acknowledge: true
+                    }
+                });
+            }
+        });
+    });
+};
+exports.companyProfessionalTrainingBatchValidationAction = companyProfessionalTrainingBatchValidationAction;
+async function performCrossRecordValidations(record, allRecords, recordNumber, batchErrors, batchWarnings) {
+    const externalId = record.values?.external_id?.value;
+    const externalIdType = record.values?.external_id_type?.value;
+    const trainingType = record.values?.training_type?.value;
+    const startDate = record.values?.start_date?.value;
+    const endDate = record.values?.end_date?.value;
+    const institutionHospitalName = record.values?.institution_hospital_name?.value;
+    const departmentProgram = record.values?.department_program?.value;
+    // Duplicate External ID + Training Type validation
+    if (externalId && externalIdType && trainingType) {
+        const duplicates = allRecords.filter((otherRecord, index) => index !== recordNumber - 1 && // Don't compare with self
+            otherRecord.values?.external_id?.value === externalId &&
+            otherRecord.values?.external_id_type?.value === externalIdType &&
+            otherRecord.values?.training_type?.value === trainingType);
+        if (duplicates.length > 0) {
+            batchErrors.push(`Row ${recordNumber}: Duplicate combination found - External ID "${externalId}" + Training Type "${trainingType}" already exists`);
+        }
+    }
+    // Duplicate External ID + Institution + Department validation
+    if (externalId && externalIdType && institutionHospitalName && departmentProgram) {
+        const duplicates = allRecords.filter((otherRecord, index) => index !== recordNumber - 1 && // Don't compare with self
+            otherRecord.values?.external_id?.value === externalId &&
+            otherRecord.values?.external_id_type?.value === externalIdType &&
+            otherRecord.values?.institution_hospital_name?.value === institutionHospitalName &&
+            otherRecord.values?.department_program?.value === departmentProgram);
+        if (duplicates.length > 0) {
+            batchWarnings.push(`Row ${recordNumber}: Similar training record exists for same provider at same institution/department`);
+        }
+    }
+    // Date range validation
+    if (startDate && endDate) {
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        if (start > end) {
+            batchErrors.push(`Row ${recordNumber}: Start Date cannot be after End Date`);
+        }
+        // Check for reasonable training duration (warn if > 10 years)
+        const yearsDiff = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 365);
+        if (yearsDiff > 10) {
+            batchWarnings.push(`Row ${recordNumber}: Training duration exceeds 10 years - please verify dates`);
+        }
+    }
+    // Training Type and Department validation
+    if (trainingType === "Fellowship" && departmentProgram) {
+        // Fellowship programs typically have specific naming patterns
+        const fellowshipKeywords = ["fellowship", "fellow", "subspecialty"];
+        const hasfellowshipKeyword = fellowshipKeywords.some(keyword => departmentProgram.toLowerCase().includes(keyword));
+        if (!hasfellowshipKeyword) {
+            batchWarnings.push(`Row ${recordNumber}: Training Type is Fellowship but Department/Program doesn't indicate fellowship training`);
+        }
+    }
+    // Institution validation patterns
+    if (institutionHospitalName) {
+        const institution = institutionHospitalName.toLowerCase();
+        const suspiciousPatterns = ["test", "example", "dummy", "xxx", "tbd"];
+        if (suspiciousPatterns.some(pattern => institution.includes(pattern))) {
+            batchWarnings.push(`Row ${recordNumber}: Institution name appears to be placeholder or test data`);
+        }
+    }
+    // Professional training sequence validation
+    const trainingHierarchy = {
+        "Internship": 1,
+        "Residency": 2,
+        "Internship/Residency": 2,
+        "Chief Residency": 3,
+        "Fellowship": 4,
+        "Post Doctoral Fellowship": 5,
+        "Faculty Position/Academic Employment": 6
+    };
+    if (trainingType && trainingHierarchy[trainingType] && externalId && externalIdType) {
+        const currentLevel = trainingHierarchy[trainingType];
+        // Check for other training records for same provider
+        const otherTrainings = allRecords.filter((otherRecord, index) => index !== recordNumber - 1 &&
+            otherRecord.values?.external_id?.value === externalId &&
+            otherRecord.values?.external_id_type?.value === externalIdType &&
+            otherRecord.values?.training_type?.value &&
+            trainingHierarchy[otherRecord.values.training_type.value]);
+        // Warn about sequence issues
+        otherTrainings.forEach((otherRecord) => {
+            const otherType = otherRecord.values.training_type.value;
+            const otherLevel = trainingHierarchy[otherType];
+            const otherStartDate = otherRecord.values?.start_date?.value;
+            if (otherLevel > currentLevel && otherStartDate && startDate) {
+                const otherStart = new Date(otherStartDate);
+                const currentStart = new Date(startDate);
+                if (currentStart > otherStart) {
+                    batchWarnings.push(`Row ${recordNumber}: ${trainingType} started after ${otherType} - unusual training sequence`);
+                }
+            }
+        });
+    }
+}
 
 
 /***/ }),
@@ -174113,6 +176588,141 @@ exports.demographicValidationHook = (0, plugin_record_hook_1.recordHook)('demogr
 
 /***/ }),
 
+/***/ 15934:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.driversLicenseValidationHook = void 0;
+const plugin_record_hook_1 = __nccwpck_require__(32095);
+const driversLicenseValidationHook = (listener) => {
+    listener.use((0, plugin_record_hook_1.recordHook)("drivers_license", (record) => {
+        // Get all field values
+        const providerName = record.get("provider_name");
+        const externalId = record.get("external_id");
+        const externalIdType = record.get("external_id_type");
+        const stateProvince = record.get("state_province");
+        const licenseNumber = record.get("license_number");
+        const nameAsAppearsOnLicense = record.get("name_as_appears_on_license");
+        const issueDate = record.get("issue_date");
+        const expiresOn = record.get("expires_on");
+        const monitorExpirationDate = record.get("monitor_expiration_date");
+        const recordViewableByProvider = record.get("record_viewable_by_provider");
+        const fileViewableByProvider = record.get("file_viewable_by_provider");
+        const fileKey = record.get("file_key");
+        const note = record.get("note");
+        const user = record.get("user");
+        const timestamp = record.get("timestamp");
+        // Required field validations - Red text fields
+        if (!externalId?.trim()) {
+            record.addError("external_id", "External Id required");
+        }
+        if (!externalIdType?.trim()) {
+            record.addError("external_id_type", "External Id Type required");
+        }
+        if (!stateProvince?.trim()) {
+            record.addError("state_province", "State required");
+        }
+        // Character limit validations
+        if (licenseNumber && licenseNumber.length > 50) {
+            record.addError("license_number", "License Number exceeds character limit of 50");
+        }
+        if (nameAsAppearsOnLicense && nameAsAppearsOnLicense.length > 50) {
+            record.addError("name_as_appears_on_license", "Name as Appears on License exceeds character limit of 50");
+        }
+        if (note && note.length > 10000) {
+            record.addError("note", "Note exceeds character limit of 10000");
+        }
+        // Date format validation (m/d/yyyy)
+        const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+        if (issueDate && !dateRegex.test(issueDate)) {
+            record.addError("issue_date", "Issue Date must be formatted as m/d/yyyy");
+        }
+        if (expiresOn && !dateRegex.test(expiresOn)) {
+            record.addError("expires_on", "Expires On must be formatted as m/d/yyyy");
+        }
+        if (timestamp && !dateRegex.test(timestamp)) {
+            record.addError("timestamp", "Timestamp must be formatted as m/d/yyyy");
+        }
+        // Date validation - check if dates are valid
+        if (issueDate && dateRegex.test(issueDate)) {
+            const [month, day, year] = issueDate.split('/').map(Number);
+            const issueDateObj = new Date(year, month - 1, day);
+            if (issueDateObj.getFullYear() !== year ||
+                issueDateObj.getMonth() !== month - 1 ||
+                issueDateObj.getDate() !== day) {
+                record.addError("issue_date", "Issue Date must be formatted as m/d/yyyy");
+            }
+        }
+        if (expiresOn && dateRegex.test(expiresOn)) {
+            const [month, day, year] = expiresOn.split('/').map(Number);
+            const expiresOnObj = new Date(year, month - 1, day);
+            if (expiresOnObj.getFullYear() !== year ||
+                expiresOnObj.getMonth() !== month - 1 ||
+                expiresOnObj.getDate() !== day) {
+                record.addError("expires_on", "Expires On must be formatted as m/d/yyyy");
+            }
+        }
+        // Cross-field date validation - Issue Date must be before Expires On
+        if (issueDate && expiresOn && dateRegex.test(issueDate) && dateRegex.test(expiresOn)) {
+            const [issueMonth, issueDay, issueYear] = issueDate.split('/').map(Number);
+            const [expiresMonth, expiresDay, expiresYear] = expiresOn.split('/').map(Number);
+            const issueDateObj = new Date(issueYear, issueMonth - 1, issueDay);
+            const expiresDateObj = new Date(expiresYear, expiresMonth - 1, expiresDay);
+            if (issueDateObj >= expiresDateObj) {
+                record.addError("issue_date", "Issue Date must be before Expiration Date");
+            }
+        }
+        // T/F validation for boolean-style fields
+        if (monitorExpirationDate && monitorExpirationDate.trim() && !["T", "F"].includes(monitorExpirationDate.trim())) {
+            record.addError("monitor_expiration_date", "Monitor Expiration Date must be T or F");
+        }
+        if (recordViewableByProvider && recordViewableByProvider.trim() && !["T", "F"].includes(recordViewableByProvider.trim())) {
+            record.addError("record_viewable_by_provider", "Record Viewable by Provider must be T or F");
+        }
+        if (fileViewableByProvider && fileViewableByProvider.trim() && !["T", "F"].includes(fileViewableByProvider.trim())) {
+            record.addError("file_viewable_by_provider", "File Viewable by Provider must be T or F");
+        }
+        // Business rule warning: File Viewable must be F when Record Viewable is F
+        if (recordViewableByProvider === "F" && fileViewableByProvider === "T") {
+            record.addWarning("file_viewable_by_provider", "File Viewable by Provider must be set to 'F' on records where Record Viewable by Provider is set to 'F'");
+        }
+        // GUID format validation for File Key
+        if (fileKey && fileKey.trim()) {
+            const guidRegex = /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/;
+            if (!guidRegex.test(fileKey.trim())) {
+                record.addError("file_key", "File Key must be a valid GUID");
+            }
+        }
+        // User validation warning
+        if (!user?.trim()) {
+            record.addWarning("user", "No User listed, so \"Credentialing System\" will be listed");
+        }
+        // State/Province validation placeholder
+        // TODO: In production, validate against actual state/province dropdown values
+        if (stateProvince && stateProvince.trim()) {
+            // Common US state abbreviations for basic validation
+            const validStates = [
+                "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
+                "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
+                "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
+                "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC",
+                "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY",
+                "DC"
+            ];
+            if (!validStates.includes(stateProvince.trim().toUpperCase())) {
+                record.addError("state_province", "State/province not supported");
+            }
+        }
+        return record;
+    }));
+};
+exports.driversLicenseValidationHook = driversLicenseValidationHook;
+
+
+/***/ }),
+
 /***/ 40078:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
@@ -174858,6 +177468,177 @@ exports.locationValidationHook = locationValidationHook;
 
 /***/ }),
 
+/***/ 51358:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.malpracticeClaimValidationHook = void 0;
+const plugin_record_hook_1 = __nccwpck_require__(32095);
+const malpracticeClaimValidationHook = (listener) => {
+    listener.use((0, plugin_record_hook_1.recordHook)("malpractice_claim", (record) => {
+        // Get all field values
+        const providerName = record.get("provider_name");
+        const externalId = record.get("external_id");
+        const externalIdType = record.get("external_id_type");
+        const organizationName = record.get("organization_name");
+        const reportingEntity = record.get("reporting_entity");
+        const primaryActOmission = record.get("primary_act_omission");
+        const incidentDate = record.get("incident_date");
+        const judgmentDate = record.get("judgment_date");
+        const claimStatus = record.get("claim_status");
+        const caseNumber = record.get("case_number");
+        const carrierAttorneyStatement = record.get("carrier_attorney_statement");
+        const descriptionOfJudgment = record.get("description_of_judgment");
+        const numberOfPractitioners = record.get("number_of_practitioners");
+        const totalPaidForThisPractitioner = record.get("total_paid_for_this_practitioner");
+        const typesOfPayment = record.get("types_of_payment");
+        const paymentResults = record.get("payment_results");
+        const paymentDate = record.get("payment_date");
+        const totalPaidForClaim = record.get("total_paid_for_claim");
+        const roleInClaim = record.get("role_in_claim");
+        const providerStatement = record.get("provider_statement");
+        const fileKey = record.get("file_key");
+        const note = record.get("note");
+        const user = record.get("user");
+        const timestamp = record.get("timestamp");
+        // Required field validations - Red text fields
+        if (!externalId?.trim()) {
+            record.addError("external_id", "External Id required");
+        }
+        if (!externalIdType?.trim()) {
+            record.addError("external_id_type", "External Id Type required");
+        }
+        if (!organizationName?.trim()) {
+            record.addError("organization_name", "Organization Name required");
+        }
+        if (!reportingEntity?.trim()) {
+            record.addError("reporting_entity", "Reporting Entity required");
+        }
+        if (!incidentDate?.trim()) {
+            record.addError("incident_date", "Incident Date required");
+        }
+        // Character limit validations
+        if (organizationName && organizationName.length > 100) {
+            record.addError("organization_name", "Organization Name exceeds character limit of 100");
+        }
+        if (reportingEntity && reportingEntity.length > 100) {
+            record.addError("reporting_entity", "Reporting Entity exceeds character limit of 100");
+        }
+        if (primaryActOmission && primaryActOmission.length > 500) {
+            record.addError("primary_act_omission", "Primary Act / Omission exceeds character limit of 500");
+        }
+        if (caseNumber && caseNumber.length > 50) {
+            record.addError("case_number", "Case # exceeds character limit of 50");
+        }
+        if (carrierAttorneyStatement && carrierAttorneyStatement.length > 5000) {
+            record.addError("carrier_attorney_statement", "Carrier / Attorney Statement exceeds character limit of 5000");
+        }
+        if (descriptionOfJudgment && descriptionOfJudgment.length > 5000) {
+            record.addError("description_of_judgment", "Description of Judgment exceeds character limit of 5000");
+        }
+        if (paymentResults && paymentResults.length > 5000) {
+            record.addError("payment_results", "Payment Results exceeds character limit of 5000");
+        }
+        if (roleInClaim && roleInClaim.length > 100) {
+            record.addError("role_in_claim", "Role in Claim exceeds character limit of 100");
+        }
+        if (providerStatement && providerStatement.length > 5000) {
+            record.addError("provider_statement", "Provider Statement exceeds character limit of 5000");
+        }
+        if (note && note.length > 10000) {
+            record.addError("note", "Note exceeds character limit of 10000");
+        }
+        // Date format validation (m/d/yyyy)
+        const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+        if (incidentDate && !dateRegex.test(incidentDate)) {
+            record.addError("incident_date", "Incident Date must be formatted as m/d/yyyy");
+        }
+        if (judgmentDate && judgmentDate.trim() && !dateRegex.test(judgmentDate)) {
+            record.addError("judgment_date", "Judgment Date must be formatted as m/d/yyyy");
+        }
+        if (paymentDate && paymentDate.trim() && !dateRegex.test(paymentDate)) {
+            record.addError("payment_date", "Payment Date must be formatted as m/d/yyyy");
+        }
+        if (timestamp && timestamp.trim() && !dateRegex.test(timestamp)) {
+            record.addError("timestamp", "Timestamp must be formatted as m/d/yyyy");
+        }
+        // Date validation - check if dates are valid
+        const validateDateValue = (dateStr, fieldKey, fieldName) => {
+            if (dateStr && dateRegex.test(dateStr)) {
+                const [month, day, year] = dateStr.split('/').map(Number);
+                const dateObj = new Date(year, month - 1, day);
+                if (dateObj.getFullYear() !== year ||
+                    dateObj.getMonth() !== month - 1 ||
+                    dateObj.getDate() !== day) {
+                    record.addError(fieldKey, `${fieldName} must be formatted as m/d/yyyy`);
+                }
+            }
+        };
+        validateDateValue(incidentDate, "incident_date", "Incident Date");
+        validateDateValue(judgmentDate, "judgment_date", "Judgment Date");
+        validateDateValue(paymentDate, "payment_date", "Payment Date");
+        validateDateValue(timestamp, "timestamp", "Timestamp");
+        // Number of Practitioners validation
+        if (numberOfPractitioners && numberOfPractitioners.trim()) {
+            const practitionerCount = parseInt(numberOfPractitioners.trim(), 10);
+            if (isNaN(practitionerCount) || practitionerCount < 1 || practitionerCount > 999) {
+                record.addError("number_of_practitioners", "# of Practitioners must be an integer between 1 and 999");
+            }
+        }
+        // Payment amount validations
+        const validatePaymentAmount = (amountStr, fieldKey, fieldName) => {
+            if (amountStr && amountStr.trim()) {
+                // Remove currency symbols and commas for validation
+                const cleanAmount = amountStr.replace(/[$,]/g, '').trim();
+                const amount = parseFloat(cleanAmount);
+                if (isNaN(amount)) {
+                    record.addError(fieldKey, `${fieldName} must be a valid number`);
+                }
+                else if (amount > 2100000000) { // $2.1 billion
+                    record.addError(fieldKey, `${fieldName} cannot exceed 2.1 billion`);
+                }
+                // Character limit check (12 characters)
+                if (cleanAmount.length > 12) {
+                    record.addError(fieldKey, `${fieldName} exceeds character limit of 12`);
+                }
+            }
+        };
+        validatePaymentAmount(totalPaidForThisPractitioner, "total_paid_for_this_practitioner", "Total Paid for this Practitioner");
+        validatePaymentAmount(totalPaidForClaim, "total_paid_for_claim", "Total Paid for Claim");
+        // Dropdown validations
+        if (claimStatus && claimStatus.trim()) {
+            const validClaimStatuses = ["Open", "Closed", "Settled", "Dismissed", "Pending"];
+            if (!validClaimStatuses.includes(claimStatus.trim())) {
+                record.addError("claim_status", "Claim Status not supported");
+            }
+        }
+        if (typesOfPayment && typesOfPayment.trim()) {
+            const validPaymentTypes = ["Settlement", "Judgment", "Defense Costs", "Other"];
+            if (!validPaymentTypes.includes(typesOfPayment.trim())) {
+                record.addError("types_of_payment", "Types of Payment not supported");
+            }
+        }
+        // GUID format validation for File Key
+        if (fileKey && fileKey.trim()) {
+            const guidRegex = /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/;
+            if (!guidRegex.test(fileKey.trim())) {
+                record.addError("file_key", "File Key must be a valid GUID");
+            }
+        }
+        // User validation warning
+        if (!user?.trim()) {
+            record.addWarning("user", "No User listed, so \"Credentialing System\" will be listed");
+        }
+        return record;
+    }));
+};
+exports.malpracticeClaimValidationHook = malpracticeClaimValidationHook;
+
+
+/***/ }),
+
 /***/ 79783:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
@@ -175392,6 +178173,670 @@ exports.payerValidationHook = payerValidationHook;
 
 /***/ }),
 
+/***/ 15316:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.personalReferenceBatchValidationHook = void 0;
+const api_1 = __importDefault(__nccwpck_require__(45055));
+const personalReferenceBatchValidationHook = (listener) => {
+    listener.filter({ job: "workbook:personalReferenceValidateAction" }, (configure) => {
+        configure.on("job:ready", async (event) => {
+            const { jobId, spaceId } = event.context;
+            try {
+                await api_1.default.jobs.ack(jobId, {
+                    info: "Starting Personal Reference batch validation...",
+                    progress: 10,
+                });
+                const sheets = await api_1.default.sheets.list({ workbookId: event.context.workbookId });
+                const personalReferenceSheet = sheets.data.find(sheet => sheet.config.slug === "personal_reference");
+                if (!personalReferenceSheet) {
+                    throw new Error("Personal Reference sheet not found");
+                }
+                await api_1.default.jobs.ack(jobId, {
+                    info: "Loading Personal Reference records...",
+                    progress: 20,
+                });
+                const records = await api_1.default.records.get(personalReferenceSheet.id);
+                let totalErrors = 0;
+                let totalWarnings = 0;
+                let totalRecords = records.data.records?.length || 0;
+                // Track duplicates
+                const externalIdMap = new Map();
+                const fullNameMap = new Map();
+                await api_1.default.jobs.ack(jobId, {
+                    info: "Validating duplicate records...",
+                    progress: 40,
+                });
+                // First pass: collect all records for duplicate checking
+                records.data.records?.forEach((record, index) => {
+                    const externalId = record.values?.external_id?.value;
+                    const fullName = record.values?.full_name?.value;
+                    // Track External ID duplicates
+                    if (externalId && externalId.trim()) {
+                        const key = externalId.trim().toLowerCase();
+                        if (!externalIdMap.has(key)) {
+                            externalIdMap.set(key, []);
+                        }
+                        externalIdMap.get(key).push(index);
+                    }
+                    // Track Full Name duplicates
+                    if (fullName && fullName.trim()) {
+                        const key = fullName.trim().toLowerCase();
+                        if (!fullNameMap.has(key)) {
+                            fullNameMap.set(key, []);
+                        }
+                        fullNameMap.get(key).push(index);
+                    }
+                });
+                await api_1.default.jobs.ack(jobId, {
+                    info: "Processing business rule validations...",
+                    progress: 60,
+                });
+                // Second pass: apply duplicate validations and other business rules
+                const recordUpdates = [];
+                records.data.records?.forEach((record, index) => {
+                    const recordUpdate = {
+                        id: record.id,
+                        values: { ...record.values }
+                    };
+                    let hasUpdates = false;
+                    const externalId = record.values?.external_id?.value;
+                    const fullName = record.values?.full_name?.value;
+                    const providerName = record.values?.provider_name?.value;
+                    // Duplicate External ID validation
+                    if (externalId && externalId.trim()) {
+                        const key = externalId.trim().toLowerCase();
+                        const duplicateIndices = externalIdMap.get(key) || [];
+                        if (duplicateIndices.length > 1) {
+                            recordUpdate.values.external_id = {
+                                ...record.values.external_id,
+                                messages: [
+                                    ...(record.values.external_id.messages || []),
+                                    {
+                                        type: "error",
+                                        message: `Duplicate External Id found in rows: ${duplicateIndices.map(i => i + 1).join(", ")}`
+                                    }
+                                ]
+                            };
+                            hasUpdates = true;
+                            totalErrors++;
+                        }
+                    }
+                    // Duplicate Full Name validation (warning only)
+                    if (fullName && fullName.trim()) {
+                        const key = fullName.trim().toLowerCase();
+                        const duplicateIndices = fullNameMap.get(key) || [];
+                        if (duplicateIndices.length > 1) {
+                            recordUpdate.values.full_name = {
+                                ...record.values.full_name,
+                                messages: [
+                                    ...(record.values.full_name.messages || []),
+                                    {
+                                        type: "warn",
+                                        message: `Duplicate Full Name found in rows: ${duplicateIndices.map(i => i + 1).join(", ")}`
+                                    }
+                                ]
+                            };
+                            hasUpdates = true;
+                            totalWarnings++;
+                        }
+                    }
+                    // Provider Name validation (business rule)
+                    if (providerName && providerName.trim()) {
+                        // Check if provider name contains only valid characters
+                        const invalidChars = /[<>\"&]/;
+                        if (invalidChars.test(providerName)) {
+                            recordUpdate.values.provider_name = {
+                                ...record.values.provider_name,
+                                messages: [
+                                    ...(record.values.provider_name.messages || []),
+                                    {
+                                        type: "error",
+                                        message: "Provider Name contains invalid characters: < > \" &"
+                                    }
+                                ]
+                            };
+                            hasUpdates = true;
+                            totalErrors++;
+                        }
+                    }
+                    // Relationship validation business rules
+                    const relationship = record.values?.relationship?.value;
+                    if (relationship && relationship.trim()) {
+                        const rel = relationship.trim().toLowerCase();
+                        // Check for common relationship terms that might need standardization
+                        const standardRelationships = [
+                            'colleague', 'supervisor', 'subordinate', 'peer', 'mentor',
+                            'former colleague', 'department head', 'medical director',
+                            'chief of staff', 'residency director', 'fellowship director'
+                        ];
+                        const isStandardRelationship = standardRelationships.some(standard => rel.includes(standard.toLowerCase()));
+                        if (!isStandardRelationship && relationship.length > 50) {
+                            recordUpdate.values.relationship = {
+                                ...record.values.relationship,
+                                messages: [
+                                    ...(record.values.relationship.messages || []),
+                                    {
+                                        type: "warn",
+                                        message: "Consider using a standard relationship term for consistency"
+                                    }
+                                ]
+                            };
+                            hasUpdates = true;
+                            totalWarnings++;
+                        }
+                    }
+                    // Country/State validation business rule
+                    const country = record.values?.country?.value;
+                    const state = record.values?.state?.value;
+                    if (country && state) {
+                        const countryUpper = country.trim().toUpperCase();
+                        const stateUpper = state.trim().toUpperCase();
+                        // US state validation
+                        if (countryUpper === "US" || countryUpper === "USA" || countryUpper === "UNITED STATES") {
+                            const validUSStates = [
+                                'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
+                                'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
+                                'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+                                'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
+                                'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY',
+                                'DC' // District of Columbia
+                            ];
+                            if (!validUSStates.includes(stateUpper)) {
+                                recordUpdate.values.state = {
+                                    ...record.values.state,
+                                    messages: [
+                                        ...(record.values.state.messages || []),
+                                        {
+                                            type: "error",
+                                            message: "Invalid US state code. Use standard 2-letter abbreviation"
+                                        }
+                                    ]
+                                };
+                                hasUpdates = true;
+                                totalErrors++;
+                            }
+                        }
+                    }
+                    if (hasUpdates) {
+                        recordUpdates.push(recordUpdate);
+                    }
+                });
+                // Apply all record updates in batches
+                if (recordUpdates.length > 0) {
+                    await api_1.default.jobs.ack(jobId, {
+                        info: "Applying validation results...",
+                        progress: 80,
+                    });
+                    const batchSize = 100;
+                    for (let i = 0; i < recordUpdates.length; i += batchSize) {
+                        const batch = recordUpdates.slice(i, i + batchSize);
+                        await api_1.default.records.update(personalReferenceSheet.id, batch);
+                    }
+                }
+                // Complete the job
+                await api_1.default.jobs.complete(jobId, {
+                    outcome: {
+                        message: `Personal Reference validation completed. Processed ${totalRecords} records with ${totalErrors} errors and ${totalWarnings} warnings.`,
+                        next: {
+                            type: "wait",
+                        },
+                    },
+                });
+            }
+            catch (error) {
+                console.error("Personal Reference batch validation error:", error);
+                await api_1.default.jobs.fail(jobId, {
+                    outcome: {
+                        message: `Personal Reference validation failed: ${error.message}`,
+                    },
+                });
+            }
+        });
+    });
+};
+exports.personalReferenceBatchValidationHook = personalReferenceBatchValidationHook;
+
+
+/***/ }),
+
+/***/ 48749:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.personalReferenceValidationHook = void 0;
+const plugin_record_hook_1 = __nccwpck_require__(32095);
+const personalReferenceValidationHook = (listener) => {
+    listener.use((0, plugin_record_hook_1.recordHook)("personal_reference", (record) => {
+        // Get all field values
+        const providerName = record.get("provider_name");
+        const externalId = record.get("external_id");
+        const externalIdType = record.get("external_id_type");
+        const fullName = record.get("full_name");
+        const relationship = record.get("relationship");
+        const phoneNumber = record.get("phone_number");
+        const ext = record.get("ext");
+        const email = record.get("email");
+        const fax = record.get("fax");
+        const addressLine1 = record.get("address_line_1");
+        const addressLine2 = record.get("address_line_2");
+        const city = record.get("city");
+        const county = record.get("county");
+        const state = record.get("state");
+        const zip = record.get("zip");
+        const country = record.get("country");
+        const recordViewableByProvider = record.get("record_viewable_by_provider");
+        const fileViewableByProvider = record.get("file_viewable_by_provider");
+        const fileKey = record.get("file_key");
+        const fromDate = record.get("from");
+        const toDate = record.get("to");
+        const active = record.get("active");
+        // Required field validations - Red text fields
+        if (!externalId?.trim()) {
+            record.addError("external_id", "External Id required");
+        }
+        if (!externalIdType?.trim()) {
+            record.addError("external_id_type", "External Id Type required");
+        }
+        if (!fullName?.trim()) {
+            record.addError("full_name", "Full Name required");
+        }
+        // Character limit validations
+        if (fullName && fullName.length > 100) {
+            record.addError("full_name", "Full Name exceeds character limit of 100");
+        }
+        if (relationship && relationship.length > 100) {
+            record.addError("relationship", "Relationship exceeds character limit of 100");
+        }
+        if (ext && ext.length > 20) {
+            record.addError("ext", "Ext. must be a number up to 20 digits in length");
+        }
+        if (addressLine1 && addressLine1.length > 100) {
+            record.addError("address_line_1", "Address Line 1 exceeds character limit of 100");
+        }
+        if (addressLine2 && addressLine2.length > 50) {
+            record.addError("address_line_2", "Address Line 2 exceeds character limit of 50");
+        }
+        if (city && city.length > 50) {
+            record.addError("city", "City exceeds character limit of 50");
+        }
+        if (county && county.length > 100) {
+            record.addError("county", "County exceeds character limit of 100");
+        }
+        if (state && state.length > 50) {
+            record.addError("state", "State exceeds character limit of 50");
+        }
+        if (zip && zip.length > 10) {
+            record.addError("zip", "Zip exceeds 10 characters");
+        }
+        // Phone number validation (9, 10, or 12 digits only)
+        if (phoneNumber && phoneNumber.trim()) {
+            const phoneRegex = /^\d{9}$|^\d{10}$|^\d{12}$/;
+            if (!phoneRegex.test(phoneNumber.trim())) {
+                record.addError("phone_number", "Phone Number must be 9, 10, or 12-digit number");
+            }
+        }
+        // Extension validation (must be numeric)
+        if (ext && ext.trim()) {
+            const extRegex = /^\d+$/;
+            if (!extRegex.test(ext.trim()) || ext.trim().length > 20) {
+                record.addError("ext", "Ext. must be a number up to 20 digits in length");
+            }
+        }
+        // Email validation
+        if (email && email.trim()) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email.trim())) {
+                record.addError("email", "'Email' is not a valid email address");
+            }
+        }
+        // Fax validation (9, 10, or 12 digits only)
+        if (fax && fax.trim()) {
+            const faxRegex = /^\d{9}$|^\d{10}$|^\d{12}$/;
+            if (!faxRegex.test(fax.trim())) {
+                record.addError("fax", "Fax must be 9, 10, or 12-digit number");
+            }
+        }
+        // State validation (no non-ASCII characters)
+        if (state && state.trim()) {
+            const asciiRegex = /^[\x00-\x7F]*$/;
+            if (!asciiRegex.test(state.trim())) {
+                record.addError("state", "State not supported");
+            }
+        }
+        // Zip validation (alphanumeric only, max 10 characters)
+        if (zip && zip.trim()) {
+            const zipRegex = /^[a-zA-Z0-9]{1,10}$/;
+            if (!zipRegex.test(zip.trim())) {
+                record.addError("zip", "Zip exceeds 10 characters");
+            }
+        }
+        // T/F validation for viewability fields
+        if (recordViewableByProvider && recordViewableByProvider.trim() && !["T", "F"].includes(recordViewableByProvider.trim())) {
+            record.addError("record_viewable_by_provider", "Viewable by Provider must be T or F");
+        }
+        if (fileViewableByProvider && fileViewableByProvider.trim() && !["T", "F"].includes(fileViewableByProvider.trim())) {
+            record.addError("file_viewable_by_provider", "Viewable by Provider must be T or F");
+        }
+        // Active field validation
+        if (active && active.trim() && !["T", "F"].includes(active.trim())) {
+            record.addError("active", "Active must be T or F");
+        }
+        // Cross-field validation for viewability
+        const hasRecordViewable = recordViewableByProvider && recordViewableByProvider.trim();
+        const hasFileViewable = fileViewableByProvider && fileViewableByProvider.trim();
+        if ((hasRecordViewable && !hasFileViewable) || (!hasRecordViewable && hasFileViewable)) {
+            record.addError("record_viewable_by_provider", "If one of Record Viewable by Provider or File Viewable by Provider are imported, the other must also be imported");
+        }
+        // Business rule warning: File Viewable must be F when Record Viewable is F
+        if (recordViewableByProvider === "F" && fileViewableByProvider === "T") {
+            record.addWarning("file_viewable_by_provider", "File Viewable by Provider must be set to 'F' on records where Record Viewable by Provider is set to 'F'");
+        }
+        // GUID format validation for File Key
+        if (fileKey && fileKey.trim()) {
+            const guidRegex = /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/;
+            if (!guidRegex.test(fileKey.trim())) {
+                record.addError("file_key", "File Key must be a valid GUID");
+            }
+        }
+        // Date format validation (m/d/yyyy)
+        const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+        if (fromDate && fromDate.trim() && !dateRegex.test(fromDate.trim())) {
+            record.addError("from", "From must be formatted as m/d/yyyy");
+        }
+        if (toDate && toDate.trim() && !dateRegex.test(toDate.trim())) {
+            record.addError("to", "To must be formatted as m/d/yyyy");
+        }
+        // Date validation - check if dates are valid
+        const validateDateValue = (dateStr, fieldKey, fieldName) => {
+            if (dateStr && dateRegex.test(dateStr)) {
+                const [month, day, year] = dateStr.split('/').map(Number);
+                const dateObj = new Date(year, month - 1, day);
+                if (dateObj.getFullYear() !== year ||
+                    dateObj.getMonth() !== month - 1 ||
+                    dateObj.getDate() !== day) {
+                    record.addError(fieldKey, `${fieldName} must be formatted as m/d/yyyy`);
+                }
+            }
+        };
+        validateDateValue(fromDate, "from", "From");
+        validateDateValue(toDate, "to", "To");
+        // Cross-field date validation - From must be <= To
+        if (fromDate && toDate && dateRegex.test(fromDate) && dateRegex.test(toDate)) {
+            const [fromMonth, fromDay, fromYear] = fromDate.split('/').map(Number);
+            const [toMonth, toDay, toYear] = toDate.split('/').map(Number);
+            const fromDateObj = new Date(fromYear, fromMonth - 1, fromDay);
+            const toDateObj = new Date(toYear, toMonth - 1, toDay);
+            if (fromDateObj > toDateObj) {
+                record.addError("from", "From must be less than or equal to To");
+            }
+        }
+        // TODO: Additional validations that would be implemented in production:
+        // - Country validation against company settings
+        // - State validation against country subdivisions
+        // - Import-level validations for existing records
+        return record;
+    }));
+};
+exports.personalReferenceValidationHook = personalReferenceValidationHook;
+
+
+/***/ }),
+
+/***/ 89897:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.professionalTrainingValidationHook = void 0;
+const plugin_record_hook_1 = __nccwpck_require__(32095);
+const professionalTrainingValidationHook = (listener) => {
+    listener.use((0, plugin_record_hook_1.recordHook)("professional_training", (record) => {
+        // Get all field values
+        const providerName = record.get("provider_name");
+        const externalId = record.get("external_id");
+        const externalIdType = record.get("external_id_type");
+        const trainingType = record.get("training_type");
+        const departmentProgram = record.get("department_program");
+        const specialty = record.get("specialty");
+        const institutionHospitalName = record.get("institution_hospital_name");
+        const institutionEmail = record.get("institution_email");
+        const addressLine1 = record.get("address_line_1");
+        const addressLine2 = record.get("address_line_2");
+        const city = record.get("city");
+        const state = record.get("state");
+        const zip = record.get("zip");
+        const country = record.get("country");
+        const institutionPhoneNumber = record.get("institution_phone_number");
+        const ext = record.get("ext");
+        const fax = record.get("fax");
+        const directorsName = record.get("directors_name");
+        const phoneNumber = record.get("phone_number");
+        const email = record.get("email");
+        const startDate = record.get("start_date");
+        const endDate = record.get("end_date");
+        const trainingStatus = record.get("training_status");
+        const anticipatedCompletionDate = record.get("anticipated_completion_date");
+        const recordViewableByProvider = record.get("record_viewable_by_provider");
+        const acgme = record.get("acgme");
+        const website = record.get("website");
+        const fileViewableByProvider = record.get("file_viewable_by_provider");
+        const ignoreRequiredFieldsValidation = record.get("ignore_required_fields_validation");
+        const fileKey = record.get("file_key");
+        const note = record.get("note");
+        const user = record.get("user");
+        const timestamp = record.get("timestamp");
+        // Required field validations
+        if (!externalId?.trim()) {
+            record.addError("external_id", "External Id required");
+        }
+        if (!externalIdType?.trim()) {
+            record.addError("external_id_type", "External Id Type required");
+        }
+        if (!trainingType?.trim()) {
+            record.addError("training_type", "Training Type required");
+        }
+        // External ID and External ID Type cross-validation
+        const hasExternalId = externalId && externalId.trim();
+        const hasExternalIdType = externalIdType && externalIdType.trim();
+        if ((hasExternalId && !hasExternalIdType) || (!hasExternalId && hasExternalIdType)) {
+            record.addError("external_id", "Must provide both External ID and External ID Type");
+            record.addError("external_id_type", "Must provide both External ID and External ID Type");
+        }
+        // Training Type validation (already handled by enum, but additional validation)
+        if (trainingType && trainingType.trim()) {
+            const validTrainingTypes = [
+                "Internship", "Residency", "Internship/Residency", "Chief Residency",
+                "Fellowship", "Post Doctoral Fellowship", "Faculty Position/Academic Employment", "Other"
+            ];
+            if (!validTrainingTypes.includes(trainingType.trim())) {
+                record.addError("training_type", "Training Type not supported");
+            }
+        }
+        // Character limit validations
+        if (departmentProgram && departmentProgram.length > 100) {
+            record.addError("department_program", "Department / Program exceeds character limit of 100");
+        }
+        if (specialty && specialty.length > 100) {
+            record.addError("specialty", "Specialty exceeds character limit of 100");
+        }
+        if (addressLine1 && addressLine1.length > 100) {
+            record.addError("address_line_1", "Address Line 1 exceeds character limit of 100");
+        }
+        if (addressLine2 && addressLine2.length > 50) {
+            record.addError("address_line_2", "Address Line 2 exceeds character limit of 50");
+        }
+        if (city && city.length > 50) {
+            record.addError("city", "City exceeds character limit of 50");
+        }
+        if (state && state.length > 50) {
+            record.addError("state", "State exceeds character limit of 50");
+        }
+        if (country && country.length > 100) {
+            record.addError("country", "Country exceeds character limit of 100");
+        }
+        if (directorsName && directorsName.length > 100) {
+            record.addError("directors_name", "Director's Name exceeds character limit of 100");
+        }
+        if (website && website.length > 500) {
+            record.addError("website", "Website exceeds character limit of 500");
+        }
+        if (note && note.length > 10000) {
+            record.addError("note", "Note exceeds character limit of 10000");
+        }
+        // Email validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (institutionEmail && institutionEmail.trim() && !emailRegex.test(institutionEmail.trim())) {
+            record.addError("institution_email", "'Institution Email' is not a valid email address.");
+        }
+        if (email && email.trim() && !emailRegex.test(email.trim())) {
+            record.addError("email", "'Email' is not a valid email address.");
+        }
+        // Phone number validations (9, 10, or 12 digits only)
+        const phoneRegex = /^\d{9}$|^\d{10}$|^\d{12}$/;
+        if (institutionPhoneNumber && institutionPhoneNumber.trim() && !phoneRegex.test(institutionPhoneNumber.trim())) {
+            record.addError("institution_phone_number", "Institution Phone Number must be 9, 10, or 12-digit number");
+        }
+        if (phoneNumber && phoneNumber.trim() && !phoneRegex.test(phoneNumber.trim())) {
+            record.addError("phone_number", "Phone Number must be 9, 10, or 12-digit number");
+        }
+        if (fax && fax.trim() && !phoneRegex.test(fax.trim())) {
+            record.addError("fax", "Fax must be 9, 10, or 12-digit number");
+        }
+        // Extension validation (must be numeric, max 20 digits)
+        if (ext && ext.trim()) {
+            const extRegex = /^\d{1,20}$/;
+            if (!extRegex.test(ext.trim())) {
+                record.addError("ext", "Ext.' must be a number up to 20 digits in length");
+            }
+        }
+        // State validation (no non-ASCII characters)
+        if (state && state.trim()) {
+            const asciiRegex = /^[\x00-\x7F]*$/;
+            if (!asciiRegex.test(state.trim())) {
+                record.addError("state", "State not supported");
+            }
+        }
+        // Zip validation (5, 6, or 9 digits)
+        if (zip && zip.trim()) {
+            const zipRegex = /^\d{5}$|^\d{6}$|^\d{9}$/;
+            if (!zipRegex.test(zip.trim())) {
+                record.addError("zip", "Zip is not 5, 6, or 9 digits");
+            }
+        }
+        // Date format validation (m/d/yyyy)
+        const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+        const validateDateValue = (dateStr, fieldKey, fieldName) => {
+            if (dateStr && dateStr.trim()) {
+                if (!dateRegex.test(dateStr.trim())) {
+                    record.addError(fieldKey, `${fieldName} must be formatted as m/d/yyyy`);
+                    return false;
+                }
+                const [month, day, year] = dateStr.trim().split('/').map(Number);
+                const dateObj = new Date(year, month - 1, day);
+                if (dateObj.getFullYear() !== year ||
+                    dateObj.getMonth() !== month - 1 ||
+                    dateObj.getDate() !== day) {
+                    record.addError(fieldKey, `${fieldName} must be formatted as m/d/yyyy`);
+                    return false;
+                }
+                return true;
+            }
+            return false;
+        };
+        validateDateValue(startDate, "start_date", "Start Date");
+        validateDateValue(endDate, "end_date", "End Date");
+        validateDateValue(anticipatedCompletionDate, "anticipated_completion_date", "Anticipated Completion Date");
+        validateDateValue(timestamp, "timestamp", "Timestamp");
+        // Training Status validation
+        if (trainingStatus && trainingStatus.trim()) {
+            const validStatuses = ["Completed", "Enrolled", "In Progress", "Not Completed"];
+            if (!validStatuses.includes(trainingStatus.trim())) {
+                record.addError("training_status", "Training Status must be: Completed / Enrolled / In Progress / Not Completed");
+            }
+        }
+        // T/F validation for viewability and ACGME fields
+        if (recordViewableByProvider && recordViewableByProvider.trim() && !["T", "F"].includes(recordViewableByProvider.trim())) {
+            record.addError("record_viewable_by_provider", "Viewable by Provider must be T or F");
+        }
+        if (fileViewableByProvider && fileViewableByProvider.trim() && !["T", "F"].includes(fileViewableByProvider.trim())) {
+            record.addError("file_viewable_by_provider", "File Viewable by Provider must be T or F");
+        }
+        if (acgme && acgme.trim() && !["T", "F"].includes(acgme.trim())) {
+            record.addError("acgme", "ACGME must be T, F, or NULL");
+        }
+        // Y/N validation for Ignore Required Fields Validation
+        if (ignoreRequiredFieldsValidation && ignoreRequiredFieldsValidation.trim() && !["Y", "N"].includes(ignoreRequiredFieldsValidation.trim())) {
+            record.addError("ignore_required_fields_validation", "Ignore Required Fields Validation? must be Y or N");
+        }
+        // GUID format validation for File Key
+        if (fileKey && fileKey.trim()) {
+            const guidRegex = /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/;
+            if (!guidRegex.test(fileKey.trim())) {
+                record.addError("file_key", "File Key must be a valid GUID");
+            }
+        }
+        // URL validation for Website
+        if (website && website.trim()) {
+            try {
+                new URL(website.trim());
+            }
+            catch {
+                record.addError("website", "Website is not a valid URL");
+            }
+        }
+        // User validation warning
+        if (!user || !user.trim()) {
+            record.addWarning("user", "No User listed, so \"Credentialing System\" will be listed");
+        }
+        // External ID format validation based on type
+        if (externalId && externalIdType && externalId.trim() && externalIdType.trim()) {
+            const id = externalId.trim();
+            const type = externalIdType.trim();
+            switch (type) {
+                case "NPI":
+                    // NPI should be 10 digits
+                    if (!/^\d{10}$/.test(id)) {
+                        record.addError("external_id", "NPI must be exactly 10 digits");
+                    }
+                    break;
+                case "InternalID":
+                case "ProviderID":
+                case "EmrID":
+                case "BillingSystemID":
+                    // Basic alphanumeric validation for other ID types
+                    if (!/^[A-Za-z0-9\-\_\.]+$/.test(id)) {
+                        record.addError("external_id", `${type} contains invalid characters. Use only letters, numbers, hyphens, underscores, and periods`);
+                    }
+                    break;
+            }
+        }
+        // TODO: Production validations that would be implemented:
+        // - Validate Specialty against Setup > List Management > Specialty
+        // - Cross-reference External ID/Type with existing providers in company
+        // - Validate Country against Country dropdown
+        // - Validate State against subdivision dropdown for the country
+        // - Country/State cross-validation for updates
+        // - File Key validation against existing files in system
+        // - User validation against Cred Spec emails
+        // - Provider name matching validation
+        return record;
+    }));
+};
+exports.professionalTrainingValidationHook = professionalTrainingValidationHook;
+
+
+/***/ }),
+
 /***/ 15613:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
@@ -175901,6 +179346,505 @@ exports.providerPayerEnrollmentDatesValidationHook = providerPayerEnrollmentDate
 
 /***/ }),
 
+/***/ 50901:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.providerPrivilegesBatchValidationHook = void 0;
+const api_1 = __importDefault(__nccwpck_require__(45055));
+const providerPrivilegesBatchValidationHook = (listener) => {
+    listener.filter({ job: "workbook:providerPrivilegesValidateAction" }, (configure) => {
+        configure.on("job:ready", async (event) => {
+            const { jobId, spaceId } = event.context;
+            try {
+                await api_1.default.jobs.ack(jobId, {
+                    info: "Starting Provider Privileges batch validation...",
+                    progress: 10,
+                });
+                const sheets = await api_1.default.sheets.list({ workbookId: event.context.workbookId });
+                const providerPrivilegesSheet = sheets.data.find(sheet => sheet.config.slug === "provider_privileges");
+                if (!providerPrivilegesSheet) {
+                    throw new Error("Provider Privileges sheet not found");
+                }
+                await api_1.default.jobs.ack(jobId, {
+                    info: "Loading Provider Privileges records...",
+                    progress: 20,
+                });
+                const records = await api_1.default.records.get(providerPrivilegesSheet.id);
+                let totalErrors = 0;
+                let totalWarnings = 0;
+                let totalRecords = records.data.records?.length || 0;
+                // Track duplicates and validation data
+                const externalIdMap = new Map();
+                const locationKeyMap = new Map();
+                const privilegeNameMap = new Map();
+                await api_1.default.jobs.ack(jobId, {
+                    info: "Validating duplicate records and business rules...",
+                    progress: 40,
+                });
+                // First pass: collect all records for duplicate checking and validation
+                records.data.records?.forEach((record, index) => {
+                    const externalId = record.values?.external_id?.value;
+                    const externalIdType = record.values?.external_id_type?.value;
+                    const locationKey = record.values?.location_key?.value;
+                    const privilegeName = record.values?.privilege_name?.value;
+                    // Track External ID + Type combinations for duplicate detection
+                    if (externalId && externalIdType && externalId.trim() && externalIdType.trim()) {
+                        const key = `${externalId.trim()}|${externalIdType.trim()}`.toLowerCase();
+                        if (!externalIdMap.has(key)) {
+                            externalIdMap.set(key, []);
+                        }
+                        externalIdMap.get(key).push(index);
+                    }
+                    // Track Location Keys
+                    if (locationKey && locationKey.trim()) {
+                        const key = locationKey.trim().toLowerCase();
+                        if (!locationKeyMap.has(key)) {
+                            locationKeyMap.set(key, []);
+                        }
+                        locationKeyMap.get(key).push(index);
+                    }
+                    // Track Privilege Names for reference
+                    if (privilegeName && privilegeName.trim()) {
+                        const key = privilegeName.trim().toLowerCase();
+                        if (!privilegeNameMap.has(key)) {
+                            privilegeNameMap.set(key, []);
+                        }
+                        privilegeNameMap.get(key).push(index);
+                    }
+                });
+                await api_1.default.jobs.ack(jobId, {
+                    info: "Processing business rule validations...",
+                    progress: 60,
+                });
+                // Second pass: apply business rule validations
+                const recordUpdates = [];
+                records.data.records?.forEach((record, index) => {
+                    const recordUpdate = {
+                        id: record.id,
+                        values: { ...record.values }
+                    };
+                    let hasUpdates = false;
+                    const externalId = record.values?.external_id?.value;
+                    const externalIdType = record.values?.external_id_type?.value;
+                    const locationKey = record.values?.location_key?.value;
+                    const privilegeName = record.values?.privilege_name?.value;
+                    const status = record.values?.status?.value;
+                    const grantedBy = record.values?.granted_by?.value;
+                    const apptDate = record.values?.appt_date?.value;
+                    const reapptDate = record.values?.reappt_date?.value;
+                    // External ID + Type duplicate validation
+                    if (externalId && externalIdType && externalId.trim() && externalIdType.trim()) {
+                        const key = `${externalId.trim()}|${externalIdType.trim()}`.toLowerCase();
+                        const duplicateIndices = externalIdMap.get(key) || [];
+                        if (duplicateIndices.length > 1) {
+                            recordUpdate.values.external_id = {
+                                ...record.values.external_id,
+                                messages: [
+                                    ...(record.values.external_id.messages || []),
+                                    {
+                                        type: "warn",
+                                        message: `Duplicate External ID + Type combination found in rows: ${duplicateIndices.map(i => i + 1).join(", ")}`
+                                    }
+                                ]
+                            };
+                            hasUpdates = true;
+                            totalWarnings++;
+                        }
+                    }
+                    // Location Key validation (basic format check already done in field validation)
+                    if (locationKey && locationKey.trim()) {
+                        // Simulate location key validation against company locations
+                        // In production, this would check against actual location database
+                        const guidRegex = /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/;
+                        if (guidRegex.test(locationKey.trim())) {
+                            // Simulate "location not found" for specific test GUIDs
+                            if (locationKey.trim().toLowerCase().includes('00000000')) {
+                                recordUpdate.values.location_key = {
+                                    ...record.values.location_key,
+                                    messages: [
+                                        ...(record.values.location_key.messages || []),
+                                        {
+                                            type: "error",
+                                            message: "No matching location found."
+                                        }
+                                    ]
+                                };
+                                hasUpdates = true;
+                                totalErrors++;
+                            }
+                            // Simulate "provider not assigned to location" for specific test cases
+                            if (locationKey.trim().toLowerCase().includes('99999999')) {
+                                recordUpdate.values.location_key = {
+                                    ...record.values.location_key,
+                                    messages: [
+                                        ...(record.values.location_key.messages || []),
+                                        {
+                                            type: "error",
+                                            message: "Provider is not assigned to this location."
+                                        }
+                                    ]
+                                };
+                                hasUpdates = true;
+                                totalErrors++;
+                            }
+                        }
+                    }
+                    // Privilege Name validation
+                    if (privilegeName && privilegeName.trim()) {
+                        const name = privilegeName.trim();
+                        // Simulate privilege name validation against company privileges
+                        // In production, this would check against actual privilege database
+                        if (name.toLowerCase().includes('invalid') || name.toLowerCase().includes('test')) {
+                            recordUpdate.values.privilege_name = {
+                                ...record.values.privilege_name,
+                                messages: [
+                                    ...(record.values.privilege_name.messages || []),
+                                    {
+                                        type: "error",
+                                        message: "Privilege Name does not match an existing Privilege Name within the Company"
+                                    }
+                                ]
+                            };
+                            hasUpdates = true;
+                            totalErrors++;
+                        }
+                        // Simulate duplicate privilege names in company
+                        if (name.toLowerCase().includes('duplicate')) {
+                            recordUpdate.values.privilege_name = {
+                                ...record.values.privilege_name,
+                                messages: [
+                                    ...(record.values.privilege_name.messages || []),
+                                    {
+                                        type: "error",
+                                        message: "Privilege Name matches more than one existing Privilege"
+                                    }
+                                ]
+                            };
+                            hasUpdates = true;
+                            totalErrors++;
+                        }
+                    }
+                    // Status validation
+                    if (status && status.trim()) {
+                        // Common privilege statuses for basic validation
+                        const validStatuses = [
+                            'approved', 'pending', 'denied', 'expired', 'suspended', 'active', 'inactive'
+                        ];
+                        if (!validStatuses.includes(status.trim().toLowerCase())) {
+                            recordUpdate.values.status = {
+                                ...record.values.status,
+                                messages: [
+                                    ...(record.values.status.messages || []),
+                                    {
+                                        type: "error",
+                                        message: "Status does not match an existing Status within the Company"
+                                    }
+                                ]
+                            };
+                            hasUpdates = true;
+                            totalErrors++;
+                        }
+                    }
+                    // Granted By validation
+                    if (grantedBy && grantedBy.trim()) {
+                        // Simulate granted by validation
+                        // In production, this would check against actual granted by list
+                        if (grantedBy.trim().length < 3) {
+                            recordUpdate.values.granted_by = {
+                                ...record.values.granted_by,
+                                messages: [
+                                    ...(record.values.granted_by.messages || []),
+                                    {
+                                        type: "error",
+                                        message: "Granted By does not match an existing Granted By within the Company"
+                                    }
+                                ]
+                            };
+                            hasUpdates = true;
+                            totalErrors++;
+                        }
+                    }
+                    // External ID format validation based on type (enhanced)
+                    if (externalId && externalIdType && externalId.trim() && externalIdType.trim()) {
+                        const id = externalId.trim();
+                        const type = externalIdType.trim();
+                        // Simulate provider matching validation
+                        // In production, this would check against actual provider database
+                        if (type === "NPI" && id === "1234567890") {
+                            recordUpdate.values.external_id = {
+                                ...record.values.external_id,
+                                messages: [
+                                    ...(record.values.external_id.messages || []),
+                                    {
+                                        type: "error",
+                                        message: "No matching provider found"
+                                    }
+                                ]
+                            };
+                            hasUpdates = true;
+                            totalErrors++;
+                        }
+                        // Simulate ID collision detection
+                        if (id.toLowerCase().includes('duplicate')) {
+                            recordUpdate.values.external_id = {
+                                ...record.values.external_id,
+                                messages: [
+                                    ...(record.values.external_id.messages || []),
+                                    {
+                                        type: "error",
+                                        message: `${type} matches the ${type} of an existing provider`
+                                    }
+                                ]
+                            };
+                            hasUpdates = true;
+                            totalErrors++;
+                        }
+                    }
+                    // Provider and location status warnings
+                    if (externalId && externalId.trim().toLowerCase().includes('inactive')) {
+                        recordUpdate.values.external_id = {
+                            ...record.values.external_id,
+                            messages: [
+                                ...(record.values.external_id.messages || []),
+                                {
+                                    type: "warn",
+                                    message: "Provider was updated but is inactive."
+                                }
+                            ]
+                        };
+                        hasUpdates = true;
+                        totalWarnings++;
+                    }
+                    if (locationKey && locationKey.trim().toLowerCase().includes('archived')) {
+                        recordUpdate.values.location_key = {
+                            ...record.values.location_key,
+                            messages: [
+                                ...(record.values.location_key.messages || []),
+                                {
+                                    type: "warn",
+                                    message: "Privilege history was added/updated but Location is archived in Settings"
+                                }
+                            ]
+                        };
+                        hasUpdates = true;
+                        totalWarnings++;
+                    }
+                    // Provider type/specialty mismatch warning
+                    if (privilegeName && privilegeName.trim().toLowerCase().includes('mismatch')) {
+                        recordUpdate.values.privilege_name = {
+                            ...record.values.privilege_name,
+                            messages: [
+                                ...(record.values.privilege_name.messages || []),
+                                {
+                                    type: "warn",
+                                    message: "Privilege (Provider Type, Specialty, Sub-Specialty) does not match Provider's (Provider Type, Specialty, Sub-Specialty)"
+                                }
+                            ]
+                        };
+                        hasUpdates = true;
+                        totalWarnings++;
+                    }
+                    if (hasUpdates) {
+                        recordUpdates.push(recordUpdate);
+                    }
+                });
+                // Apply all record updates in batches
+                if (recordUpdates.length > 0) {
+                    await api_1.default.jobs.ack(jobId, {
+                        info: "Applying validation results...",
+                        progress: 80,
+                    });
+                    const batchSize = 100;
+                    for (let i = 0; i < recordUpdates.length; i += batchSize) {
+                        const batch = recordUpdates.slice(i, i + batchSize);
+                        await api_1.default.records.update(providerPrivilegesSheet.id, batch);
+                    }
+                }
+                // Complete the job
+                await api_1.default.jobs.complete(jobId, {
+                    outcome: {
+                        message: `Provider Privileges validation completed. Processed ${totalRecords} records with ${totalErrors} errors and ${totalWarnings} warnings.`,
+                        next: {
+                            type: "wait",
+                        },
+                    },
+                });
+            }
+            catch (error) {
+                console.error("Provider Privileges batch validation error:", error);
+                await api_1.default.jobs.fail(jobId, {
+                    outcome: {
+                        message: `Provider Privileges validation failed: ${error.message}`,
+                    },
+                });
+            }
+        });
+    });
+};
+exports.providerPrivilegesBatchValidationHook = providerPrivilegesBatchValidationHook;
+
+
+/***/ }),
+
+/***/ 73499:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.providerPrivilegesValidationHook = void 0;
+const plugin_record_hook_1 = __nccwpck_require__(32095);
+const providerPrivilegesValidationHook = (listener) => {
+    listener.use((0, plugin_record_hook_1.recordHook)("provider_privileges", (record) => {
+        // Get all field values
+        const providerName = record.get("provider_name");
+        const externalId = record.get("external_id");
+        const externalIdType = record.get("external_id_type");
+        const locationName = record.get("location_name");
+        const locationKey = record.get("location_key");
+        const privilegeName = record.get("privilege_name");
+        const conditions = record.get("conditions");
+        const apptDate = record.get("appt_date");
+        const reapptDate = record.get("reappt_date");
+        const status = record.get("status");
+        const grantedBy = record.get("granted_by");
+        const ignoreRequiredFields = record.get("ignore_required_fields_validation");
+        // Required field validations
+        if (!externalId?.trim()) {
+            record.addError("external_id", "External ID required");
+        }
+        if (!externalIdType?.trim()) {
+            record.addError("external_id_type", "External ID Type required");
+        }
+        if (!locationKey?.trim()) {
+            record.addError("location_key", "Location Key required");
+        }
+        if (!privilegeName?.trim()) {
+            record.addError("privilege_name", "Privilege Name required");
+        }
+        // External ID and External ID Type cross-validation
+        const hasExternalId = externalId && externalId.trim();
+        const hasExternalIdType = externalIdType && externalIdType.trim();
+        if ((hasExternalId && !hasExternalIdType) || (!hasExternalId && hasExternalIdType)) {
+            record.addError("external_id", "Must provide both External ID and External ID Type");
+            record.addError("external_id_type", "Must provide both External ID and External ID Type");
+        }
+        // Location Key GUID format validation
+        if (locationKey && locationKey.trim()) {
+            const guidRegex = /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/;
+            if (!guidRegex.test(locationKey.trim())) {
+                record.addError("location_key", "Location Key must be a valid GUID");
+            }
+        }
+        // External ID Type validation
+        if (externalIdType && externalIdType.trim()) {
+            const validTypes = ["NPI", "InternalID", "ProviderID", "EmrID", "BillingSystemID"];
+            if (!validTypes.includes(externalIdType.trim())) {
+                record.addError("external_id_type", "External ID Type not valid");
+            }
+        }
+        // Conditions character limit validation
+        if (conditions && conditions.length > 10000) {
+            record.addError("conditions", "Conditions exceeds character limit of 10000");
+        }
+        // Date format validation (m/d/yyyy)
+        const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+        const validateDateValue = (dateStr, fieldKey, fieldName) => {
+            if (dateStr && dateStr.trim()) {
+                if (!dateRegex.test(dateStr.trim())) {
+                    record.addError(fieldKey, `${fieldName} must be formatted as m/d/yyyy`);
+                    return false;
+                }
+                const [month, day, year] = dateStr.trim().split('/').map(Number);
+                const dateObj = new Date(year, month - 1, day);
+                if (dateObj.getFullYear() !== year ||
+                    dateObj.getMonth() !== month - 1 ||
+                    dateObj.getDate() !== day) {
+                    record.addError(fieldKey, `${fieldName} must be formatted as m/d/yyyy`);
+                    return false;
+                }
+                return true;
+            }
+            return false;
+        };
+        const isApptDateValid = validateDateValue(apptDate, "appt_date", "Appt. Date");
+        const isReapptDateValid = validateDateValue(reapptDate, "reappt_date", "Reappt. Date");
+        // Status-based conditional validation for Approved status
+        const isApprovedStatus = status && status.trim().toLowerCase() === 'approved';
+        if (isApprovedStatus) {
+            if (!apptDate?.trim()) {
+                record.addError("appt_date", "Appt. Date is required when Status is \"Approved\" (or a company configured equivalent)");
+            }
+            if (!reapptDate?.trim()) {
+                record.addError("reappt_date", "Reappt. Date is required when Status is \"Approved\" (or a company configured equivalent)");
+            }
+        }
+        // Cross-field date validation - Reappt. Date must be after Appt. Date
+        if (isApptDateValid && isReapptDateValid && apptDate && reapptDate) {
+            const [apptMonth, apptDay, apptYear] = apptDate.trim().split('/').map(Number);
+            const [reapptMonth, reapptDay, reapptYear] = reapptDate.trim().split('/').map(Number);
+            const apptDateObj = new Date(apptYear, apptMonth - 1, apptDay);
+            const reapptDateObj = new Date(reapptYear, reapptMonth - 1, reapptDay);
+            if (reapptDateObj <= apptDateObj) {
+                record.addError("reappt_date", "Reappt. Date must be after Appt. Date");
+            }
+        }
+        // Ignore Required Fields Validation Y/N validation
+        if (ignoreRequiredFields && ignoreRequiredFields.trim() && !["Y", "N"].includes(ignoreRequiredFields.trim())) {
+            record.addError("ignore_required_fields_validation", "Ignore Required Fields Validation? must be Y or N");
+        }
+        // External ID format validation based on type
+        if (externalId && externalIdType && externalId.trim() && externalIdType.trim()) {
+            const id = externalId.trim();
+            const type = externalIdType.trim();
+            switch (type) {
+                case "NPI":
+                    // NPI should be 10 digits
+                    if (!/^\d{10}$/.test(id)) {
+                        record.addError("external_id", "NPI must be exactly 10 digits");
+                    }
+                    break;
+                case "InternalID":
+                case "ProviderID":
+                case "EmrID":
+                case "BillingSystemID":
+                    // Basic alphanumeric validation for other ID types
+                    if (!/^[A-Za-z0-9\-\_\.]+$/.test(id)) {
+                        record.addError("external_id", `${type} contains invalid characters. Use only letters, numbers, hyphens, underscores, and periods`);
+                    }
+                    break;
+            }
+        }
+        // Basic privilege name validation
+        if (privilegeName && privilegeName.trim()) {
+            // Check for potentially problematic characters
+            const invalidChars = /[<>\"&]/;
+            if (invalidChars.test(privilegeName)) {
+                record.addError("privilege_name", "Privilege Name contains invalid characters: < > \" &");
+            }
+        }
+        // TODO: Production validations that would be implemented:
+        // - Validate Status against company's Privilege Status configurable list
+        // - Validate Granted By against company's Privileges Granted By configurable list
+        // - Cross-reference External ID/Type with existing providers in company
+        // - Validate Location Key against existing locations in company
+        // - Validate Privilege Name against existing privileges in company
+        // - Check provider-location assignment validity
+        // - Validate privilege provider type/specialty matching
+        return record;
+    }));
+};
+exports.providerPrivilegesValidationHook = providerPrivilegesValidationHook;
+
+
+/***/ }),
+
 /***/ 11680:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
@@ -176088,6 +180032,12 @@ const provider_appointment_dates_sheet_1 = __nccwpck_require__(1232);
 const provider_location_details_sheet_1 = __nccwpck_require__(82499);
 const provider_payer_enrollment_dates_sheet_1 = __nccwpck_require__(45177);
 const location_sheet_1 = __nccwpck_require__(73186);
+const drivers_license_sheet_1 = __nccwpck_require__(31043);
+const malpractice_claim_sheet_1 = __nccwpck_require__(99573);
+const personal_reference_sheet_1 = __nccwpck_require__(59047);
+const company_privileges_sheet_1 = __nccwpck_require__(9930);
+const provider_privileges_sheet_1 = __nccwpck_require__(34297);
+const professional_training_sheet_1 = __nccwpck_require__(16031);
 // Generate field mappings from all sheet configurations
 function generateFieldMappings() {
     const sheets = [
@@ -176109,7 +180059,13 @@ function generateFieldMappings() {
         provider_appointment_dates_sheet_1.providerAppointmentDatesSheet,
         provider_location_details_sheet_1.providerLocationDetailsSheet,
         provider_payer_enrollment_dates_sheet_1.providerPayerEnrollmentDatesSheet,
-        location_sheet_1.locationSheet
+        location_sheet_1.locationSheet,
+        drivers_license_sheet_1.driversLicenseSheet,
+        malpractice_claim_sheet_1.malpracticeClaimSheet,
+        personal_reference_sheet_1.personalReferenceSheet,
+        company_privileges_sheet_1.companyPrivilegesSheet,
+        provider_privileges_sheet_1.providerPrivilegesSheet,
+        professional_training_sheet_1.professionalTrainingSheet
     ];
     const mappings = {};
     sheets.forEach(sheet => {

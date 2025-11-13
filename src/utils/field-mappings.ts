@@ -17,6 +17,12 @@ import { providerAppointmentDatesSheet } from "../blueprints/sheets/provider-app
 import { providerLocationDetailsSheet } from "../blueprints/sheets/provider-location-details.sheet";
 import { providerPayerEnrollmentDatesSheet } from "../blueprints/sheets/provider-payer-enrollment-dates.sheet";
 import { locationSheet } from "../blueprints/sheets/location.sheet";
+import { driversLicenseSheet } from "../blueprints/sheets/drivers-license.sheet";
+import { malpracticeClaimSheet } from "../blueprints/sheets/malpractice-claim.sheet";
+import { personalReferenceSheet } from "../blueprints/sheets/personal-reference.sheet";
+import { companyPrivilegesSheet } from "../blueprints/sheets/company-privileges.sheet";
+import { providerPrivilegesSheet } from "../blueprints/sheets/provider-privileges.sheet";
+import { professionalTrainingSheet } from "../blueprints/sheets/professional-training.sheet";
 
 // Generate field mappings from all sheet configurations
 export function generateFieldMappings(): { [key: string]: string } {
@@ -39,7 +45,13 @@ export function generateFieldMappings(): { [key: string]: string } {
     providerAppointmentDatesSheet,
     providerLocationDetailsSheet,
     providerPayerEnrollmentDatesSheet,
-    locationSheet
+    locationSheet,
+    driversLicenseSheet,
+    malpracticeClaimSheet,
+    personalReferenceSheet,
+    companyPrivilegesSheet,
+    providerPrivilegesSheet,
+    professionalTrainingSheet
   ];
 
   const mappings: { [key: string]: string } = {};

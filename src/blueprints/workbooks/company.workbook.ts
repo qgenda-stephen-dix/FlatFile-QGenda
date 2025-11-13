@@ -19,12 +19,18 @@ import { providerAppointmentDatesSheet } from "../sheets/provider-appointment-da
 import { providerLocationDetailsSheet } from "../sheets/provider-location-details.sheet";
 import { providerPayerEnrollmentDatesSheet } from "../sheets/provider-payer-enrollment-dates.sheet";
 import { locationSheet } from "../sheets/location.sheet";
+import { driversLicenseSheet } from "../sheets/drivers-license.sheet";
+import { malpracticeClaimSheet } from "../sheets/malpractice-claim.sheet";
+import { personalReferenceSheet } from "../sheets/personal-reference.sheet";
+import { companyPrivilegesSheet } from "../sheets/company-privileges.sheet";
+import { providerPrivilegesSheet } from "../sheets/provider-privileges.sheet";
+import { professionalTrainingSheet } from "../sheets/professional-training.sheet";
 
 export const companyWorkbook: Flatfile.CreateWorkbookConfig = {
   name: "Company Workbook",
   namespace: "workbook:qgenda-company",
   labels: [ "pinned" ],
-  sheets: [ usersSheet, demographicSheet, demographicV2Sheet, demographicReferenceSheet, stateLicenseSheet, deaLicenseSheet, affiliationSheet, boardCertificationSheet, otherCertificationSheet, malpracticeInsuranceSheet, educationGapSheet, payerLocationsSheet, payerSheet, cdsCertificateSheet, cmeSheet, educationSheet, providerAppointmentDatesSheet, providerLocationDetailsSheet, providerPayerEnrollmentDatesSheet, locationSheet ],
+  sheets: [ usersSheet, demographicSheet, demographicV2Sheet, demographicReferenceSheet, stateLicenseSheet, deaLicenseSheet, affiliationSheet, boardCertificationSheet, otherCertificationSheet, malpracticeInsuranceSheet, educationGapSheet, payerLocationsSheet, payerSheet, cdsCertificateSheet, cmeSheet, educationSheet, providerAppointmentDatesSheet, providerLocationDetailsSheet, providerPayerEnrollmentDatesSheet, locationSheet, driversLicenseSheet, malpracticeClaimSheet, personalReferenceSheet, companyPrivilegesSheet, providerPrivilegesSheet, professionalTrainingSheet ],
   actions: [ {
     operation: "downloadWorkbook",
     mode: "foreground",
