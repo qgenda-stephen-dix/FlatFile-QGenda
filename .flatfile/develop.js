@@ -165290,6 +165290,475 @@ exports.validateEducationAction = validateEducationAction;
 
 /***/ }),
 
+/***/ 84329:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.validateFileDetailsAction = void 0;
+const validateFileDetailsAction = (listener) => {
+    listener.on("job:ready", { job: "sheet:validateFileDetails" }, async ({ context: { jobId, sheetId }, ...event }) => {
+        try {
+            const { data: records } = await event.data;
+            // Track duplicates and cross-record validations
+            const externalIdMap = new Map();
+            const fileKeyMap = new Map();
+            const validatedRecords = records.map((record, index) => {
+                const externalId = record.get("externalId");
+                const externalIdType = record.get("externalIdType");
+                const fileName = record.get("fileName");
+                const fileKey = record.get("fileKey");
+                const fileCategory = record.get("fileCategory");
+                const fileType = record.get("fileType");
+                const fileDescription = record.get("fileDescription");
+                // Duplicate External ID detection
+                if (externalId && externalIdType) {
+                    const externalIdKey = `${externalId}|${externalIdType}`;
+                    if (externalIdMap.has(externalIdKey)) {
+                        const previousRow = externalIdMap.get(externalIdKey) + 1;
+                        record.addError("externalId", `Duplicate External ID and Type combination found. Previously used on row ${previousRow}`);
+                    }
+                    else {
+                        externalIdMap.set(externalIdKey, index);
+                    }
+                }
+                // File Key uniqueness validation
+                if (fileKey) {
+                    if (fileKeyMap.has(fileKey)) {
+                        const previousRow = fileKeyMap.get(fileKey) + 1;
+                        record.addWarning("fileKey", `File Key already processed on row ${previousRow}. This may overwrite previous file details.`);
+                    }
+                    else {
+                        fileKeyMap.set(fileKey, index);
+                    }
+                }
+                // Provider matching validation (simulated - would check against actual provider database)
+                if (externalId && externalIdType) {
+                    // Simulate provider not found scenario
+                    if (externalId === "NOTFOUND123") {
+                        record.addError("externalId", "No matching provider found");
+                    }
+                    // Simulate inactive provider scenario
+                    if (externalId.startsWith("INACTIVE")) {
+                        record.addWarning("externalId", "Provider was updated but is inactive");
+                    }
+                    // Simulate different provider warning for File Key
+                    if (fileKey && externalId.includes("DIFFERENT")) {
+                        record.addWarning("fileKey", "File was updated but belongs to different Provider than entered External ID");
+                    }
+                }
+                // File Key existence validation (simulated CRED system check)
+                if (fileKey) {
+                    // Simulate file not found in CRED system
+                    if (fileKey.startsWith("00000000")) {
+                        record.addError("fileKey", "File not found");
+                    }
+                    // Simulate file key format validation scenarios
+                    if (fileKey.endsWith("INVALID")) {
+                        record.addError("fileKey", "File Key must be a valid GUID");
+                    }
+                }
+                // File Type "Signable Document" PDF validation
+                if (fileType === "Signable Document") {
+                    // In a real implementation, this would check the actual file type
+                    // For simulation, we'll check if filename suggests non-PDF
+                    if (fileName) {
+                        const lowerFileName = fileName.toLowerCase();
+                        if (lowerFileName.includes(".doc") || lowerFileName.includes(".txt") ||
+                            lowerFileName.includes(".xls") || lowerFileName.includes(".jpg") ||
+                            lowerFileName.includes(".png")) {
+                            record.addError("fileType", "File must be a .pdf for selected File Type");
+                        }
+                    }
+                }
+                // File management business rules
+                if (fileName && fileKey) {
+                    // Check for potentially problematic file names
+                    if (fileName.length < 3) {
+                        record.addWarning("fileName", "File name is very short - ensure this is correct");
+                    }
+                    // Check for file extension best practices
+                    if (fileName.includes(".")) {
+                        record.addWarning("fileName", "Best Practice: Leave off file type extension (.pdf/.txt/.docx/etc) when inputting new File Name, type extension will be appended on update");
+                    }
+                }
+                // File Category and Type consistency validation
+                if (fileCategory && fileType) {
+                    // Additional business rule validations
+                    if (fileCategory === "Legal Documents" && fileType === "Signable Document") {
+                        // This combination requires special handling
+                        record.addInfo("fileType", "Signable Document in Legal Documents category requires PDF format and electronic signature capability");
+                    }
+                    if (fileCategory === "Credentials" && !fileType.includes("License") && !fileType.includes("Certification")) {
+                        record.addWarning("fileType", "File Type may not be appropriate for Credentials category");
+                    }
+                }
+                // File Description validation for special cases
+                if (fileDescription) {
+                    // Check for clearing value
+                    if (fileDescription.toLowerCase() === "none") {
+                        record.addInfo("fileDescription", "File Description will be cleared (set to 'None')");
+                    }
+                    // Check for very long descriptions
+                    if (fileDescription.length > 5000) {
+                        record.addWarning("fileDescription", "File Description is very long - consider summarizing");
+                    }
+                }
+                // Apply same individual record validations as the listener
+                // (This ensures consistency between real-time and batch validation)
+                // Required field validations
+                if (!externalId?.trim()) {
+                    record.addError("externalId", "External Id required");
+                }
+                if (!externalIdType?.trim()) {
+                    record.addError("externalIdType", "External Id Type required");
+                }
+                if (!fileKey?.trim()) {
+                    record.addError("fileKey", "File Key required");
+                }
+                return record;
+            });
+            await event.data(validatedRecords);
+        }
+        catch (error) {
+            console.error("Error in File Details validation:", error);
+            throw error;
+        }
+    });
+};
+exports.validateFileDetailsAction = validateFileDetailsAction;
+
+
+/***/ }),
+
+/***/ 92185:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.validateGlobalPrivilegeAction = void 0;
+const validateGlobalPrivilegeAction = (listener) => {
+    listener.on("job:ready", { job: "sheet:validateGlobalPrivilege" }, async ({ context: { jobId, sheetId }, ...event }) => {
+        try {
+            const { data: records } = await event.data;
+            // Track ICD/CPT Code duplicates within the file
+            const icdCptCodeMap = new Map();
+            const validatedRecords = records.map((record, index) => {
+                const privilegeName = record.get("privilegeName");
+                const icdCptCode = record.get("icdCptCode");
+                const specialty = record.get("specialty");
+                const subspecialty = record.get("subspecialty");
+                const description = record.get("description");
+                // Duplicate ICD/CPT Code detection within file
+                if (icdCptCode?.trim()) {
+                    const normalizedCode = icdCptCode.trim().toUpperCase();
+                    if (icdCptCodeMap.has(normalizedCode)) {
+                        const previousRow = icdCptCodeMap.get(normalizedCode) + 1;
+                        record.addWarning("icdCptCode", "ICD/CPT Code not unique");
+                    }
+                    else {
+                        icdCptCodeMap.set(normalizedCode, index);
+                    }
+                }
+                // System-level ICD/CPT Code duplicate check (simulated)
+                if (icdCptCode?.trim()) {
+                    // Simulate existing codes in the system
+                    const existingSystemCodes = [
+                        "99213", "99214", "99215", // Common CPT codes
+                        "I25.9", "E11.9", "Z12.11", // Common ICD-10 codes
+                        "412", "250.00", "V76.12" // Legacy ICD-9 codes
+                    ];
+                    if (existingSystemCodes.includes(icdCptCode.trim())) {
+                        record.addWarning("icdCptCode", `ICD/CPT Code '${icdCptCode}' already exists in the system, but record was successfully imported. ICD/CPT Code can be edited in-app.`);
+                    }
+                }
+                // Enhanced Specialty validation with pipe-delimited processing
+                if (specialty) {
+                    const specialtyValues = specialty.split("|").map(s => s.trim()).filter(s => s);
+                    const validSpecialties = [
+                        "Cardiology", "Pediatrics", "Internal Medicine", "Emergency Medicine",
+                        "Family Medicine", "Surgery", "Orthopedic Surgery", "Neurosurgery",
+                        "Plastic Surgery", "Radiology", "Pathology", "Anesthesiology",
+                        "Psychiatry", "Dermatology", "Ophthalmology", "Otolaryngology",
+                        "Urology", "Obstetrics and Gynecology", "Oncology", "Neurology",
+                        "Pulmonology", "Gastroenterology", "Endocrinology", "Nephrology",
+                        "Rheumatology", "Hematology", "Infectious Disease", "Critical Care",
+                        "Palliative Care", "Geriatrics", "Sports Medicine",
+                        "Physical Medicine and Rehabilitation", "Occupational Medicine",
+                        "Preventive Medicine"
+                    ];
+                    for (const specialtyValue of specialtyValues) {
+                        if (specialtyValue && !validSpecialties.includes(specialtyValue)) {
+                            record.addError("specialty", "Specialty not supported");
+                            break; // Only show one error per field
+                        }
+                    }
+                    // Validate total character count including pipes meets limit
+                    if (specialty.length > 100) {
+                        record.addError("specialty", "Specialty exceeds character limit of 100");
+                    }
+                }
+                // Enhanced Subspecialty validation with pipe-delimited processing
+                if (subspecialty) {
+                    const subspecialtyValues = subspecialty.split("|").map(s => s.trim()).filter(s => s);
+                    const validSubspecialties = [
+                        "Interventional Cardiology", "Electrophysiology", "Heart Failure",
+                        "Pediatric Cardiology", "Neonatal-Perinatal Medicine",
+                        "Pediatric Emergency Medicine", "Adolescent Medicine", "General Surgery",
+                        "Vascular Surgery", "Trauma Surgery", "Cardiothoracic Surgery",
+                        "Hand Surgery", "Spine Surgery", "Joint Replacement",
+                        "Sports Orthopedics", "Pediatric Orthopedics", "Diagnostic Radiology",
+                        "Interventional Radiology", "Nuclear Medicine", "Radiation Oncology",
+                        "Cardiac Anesthesia", "Pediatric Anesthesia", "Pain Management",
+                        "Child Psychiatry", "Forensic Psychiatry", "Addiction Medicine",
+                        "Mohs Surgery", "Pediatric Dermatology", "Dermatopathology",
+                        "Retina", "Cornea", "Glaucoma", "Facial Plastic Surgery",
+                        "Pediatric Otolaryngology", "Male Infertility", "Pediatric Urology",
+                        "Urologic Oncology", "Maternal-Fetal Medicine",
+                        "Reproductive Endocrinology", "Gynecologic Oncology",
+                        "Medical Oncology", "Surgical Oncology", "Pediatric Oncology",
+                        "Stroke Neurology", "Epilepsy", "Movement Disorders",
+                        "Interventional Pulmonology", "Sleep Medicine", "Hepatology",
+                        "Inflammatory Bowel Disease", "Diabetes", "Thyroid Disorders",
+                        "Dialysis", "Transplant Nephrology", "Lupus", "Arthritis",
+                        "Leukemia", "Bone Marrow Transplant", "HIV Medicine",
+                        "Hospital Medicine", "Hospice Care", "Pain Medicine",
+                        "Memory Care", "Concussion", "Knee Injuries", "Spinal Cord Injury",
+                        "Brain Injury", "Environmental Medicine", "Travel Medicine", "Toxicology"
+                    ];
+                    for (const subspecialtyValue of subspecialtyValues) {
+                        if (subspecialtyValue && !validSubspecialties.includes(subspecialtyValue)) {
+                            record.addError("subspecialty", "Subspecialty not supported");
+                            break; // Only show one error per field
+                        }
+                    }
+                    // Validate total character count including pipes meets limit
+                    if (subspecialty.length > 100) {
+                        record.addError("subspecialty", "Subspecialty exceeds character limit of 100");
+                    }
+                }
+                // Business logic validations
+                if (privilegeName && icdCptCode) {
+                    // Check for potentially related privilege names and codes
+                    if (privilegeName.toLowerCase().includes("cardiac") && icdCptCode.startsWith("99")) {
+                        record.addWarning("icdCptCode", "CPT code may not be appropriate for cardiac privilege. Consider ICD-10 codes starting with 'I' for cardiovascular conditions.");
+                    }
+                    if (privilegeName.toLowerCase().includes("surgery") && !icdCptCode.match(/^(0|1|2|3|4|5)/)) {
+                        record.addWarning("icdCptCode", "Surgical privileges typically use procedure codes. Verify code is appropriate for surgical privilege.");
+                    }
+                }
+                // Privilege naming consistency checks
+                if (privilegeName) {
+                    if (privilegeName.length < 5) {
+                        record.addWarning("privilegeName", "Privilege name is very short. Consider providing more descriptive name.");
+                    }
+                    // Check for common privilege naming patterns
+                    const privilegePatterns = [
+                        "Administration", "Procedure", "Surgery", "Consultation", "Evaluation",
+                        "Treatment", "Diagnosis", "Management", "Therapy", "Care"
+                    ];
+                    const hasPattern = privilegePatterns.some(pattern => privilegeName.toLowerCase().includes(pattern.toLowerCase()));
+                    if (!hasPattern) {
+                        record.addInfo("privilegeName", "Consider including privilege type (e.g., Administration, Procedure, Surgery) in the name for clarity.");
+                    }
+                }
+                // Apply same individual record validations as the listener
+                // (This ensures consistency between real-time and batch validation)
+                // Required field validations
+                if (!privilegeName?.trim()) {
+                    record.addError("privilegeName", "Privilege Name required");
+                }
+                if (!icdCptCode?.trim()) {
+                    record.addError("icdCptCode", "ICD/CPT Code required");
+                }
+                if (!specialty?.trim()) {
+                    record.addError("specialty", "Specialty required");
+                }
+                return record;
+            });
+            await event.data(validatedRecords);
+        }
+        catch (error) {
+            console.error("Error in Global Privilege validation:", error);
+            throw error;
+        }
+    });
+};
+exports.validateGlobalPrivilegeAction = validateGlobalPrivilegeAction;
+
+
+/***/ }),
+
+/***/ 40962:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.validateHealthRecordAction = void 0;
+const validateHealthRecordAction = (listener) => {
+    listener.on("job:ready", { job: "sheet:validateHealthRecord" }, async ({ context: { jobId, sheetId }, ...event }) => {
+        try {
+            const { data: records } = await event.data;
+            // Track duplicates and cross-record validations
+            const externalIdMap = new Map();
+            const fileKeyMap = new Map();
+            const validatedRecords = records.map((record, index) => {
+                const externalId = record.get("externalId");
+                const externalIdType = record.get("externalIdType");
+                const recordName = record.get("recordName");
+                const fileKey = record.get("fileKey");
+                const user = record.get("user");
+                const recordViewableByProvider = record.get("recordViewableByProvider");
+                const fileViewableByProvider = record.get("fileViewableByProvider");
+                const completionDate = record.get("completionDate");
+                const renewalDate = record.get("renewalDate");
+                // Duplicate External ID detection
+                if (externalId && externalIdType) {
+                    const externalIdKey = `${externalId}|${externalIdType}`;
+                    if (externalIdMap.has(externalIdKey)) {
+                        const previousRow = externalIdMap.get(externalIdKey) + 1;
+                        record.addError("externalId", `Duplicate External ID and Type combination found. Previously used on row ${previousRow}`);
+                    }
+                    else {
+                        externalIdMap.set(externalIdKey, index);
+                    }
+                }
+                // Provider matching validation (simulated - would check against actual provider database)
+                if (externalId && externalIdType) {
+                    // Simulate provider not found scenario
+                    if (externalId === "NOTFOUND123") {
+                        record.addError("externalId", "No matching provider found");
+                    }
+                    // Simulate inactive provider scenario
+                    if (externalId.startsWith("INACTIVE")) {
+                        record.addWarning("externalId", "Provider was updated but is inactive");
+                    }
+                }
+                // File Key business rules validation
+                if (fileKey) {
+                    // Track File Key usage for duplicate linking validation
+                    if (fileKeyMap.has(fileKey)) {
+                        const previousRow = fileKeyMap.get(fileKey) + 1;
+                        record.addWarning("fileKey", `File Key linked successfully but unlinked from Health Record - Row ${previousRow}`);
+                    }
+                    else {
+                        fileKeyMap.set(fileKey, index);
+                    }
+                    // File Key business rule validations (simulated scenarios)
+                    // File Key belongs to different company/provider
+                    if (fileKey.startsWith("00000000")) {
+                        record.addError("fileKey", "File Key invalid - does not belong to this company or provider");
+                    }
+                    // File Key not found in database
+                    if (fileKey.endsWith("NOTFOUND")) {
+                        record.addError("fileKey", "File not found");
+                    }
+                    // File type not able to be linked
+                    if (fileKey.includes("NOTYPE")) {
+                        record.addError("fileKey", "File type not able to be linked");
+                    }
+                    // Signable Document already linked
+                    if (fileKey.includes("SIGNED")) {
+                        record.addError("fileKey", "File already linked to another record and unable to be linked to a new record");
+                    }
+                    // Previous file unlinked scenario
+                    if (fileKey.includes("PREVIOUS")) {
+                        record.addWarning("fileKey", `File Key linked successfully but record's previous File Key (Previous_Document.pdf) has been unlinked`);
+                    }
+                }
+                // User validation against Cred Spec emails (simulated)
+                if (user && user.trim()) {
+                    // Simulate valid email addresses in the system
+                    const validCredSpecEmails = [
+                        "admin@hospital.com",
+                        "credentialing@hospital.com",
+                        "hr@hospital.com",
+                        "compliance@hospital.com",
+                        "medical.staff@hospital.com",
+                        "quality@hospital.com",
+                        "records@hospital.com",
+                        "system@hospital.com"
+                    ];
+                    // Check if user matches any valid email format or is in the valid list
+                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    if (!emailRegex.test(user) || !validCredSpecEmails.includes(user.toLowerCase())) {
+                        record.addError("user", "No User matches found");
+                    }
+                }
+                else {
+                    // Set default warning for empty user
+                    record.addWarning("user", "No User listed, so \"Credentialing System\" will be listed");
+                }
+                // Record and File Viewable consistency checks
+                if (recordViewableByProvider === "F" && fileViewableByProvider === "T") {
+                    record.addWarning("fileViewableByProvider", "File Viewable by Provider must be set to 'F' on records where Record Viewable by Provider is set to 'F'");
+                }
+                // Health record business logic validations
+                if (recordName && completionDate) {
+                    // Check for common health record types and date logic
+                    const healthRecordTypes = ["Physical Exam", "TB Test", "Drug Screen", "Background Check", "Immunization Record"];
+                    const isCommonType = healthRecordTypes.some(type => recordName.toLowerCase().includes(type.toLowerCase()));
+                    if (!isCommonType) {
+                        record.addInfo("recordName", "Consider using standard health record types for consistency");
+                    }
+                    // Check for future completion dates
+                    if (completionDate) {
+                        const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+                        if (dateRegex.test(completionDate)) {
+                            const completionDateObj = new Date(completionDate);
+                            const currentDate = new Date();
+                            if (completionDateObj > currentDate) {
+                                record.addWarning("completionDate", "Completion date is in the future - please verify");
+                            }
+                        }
+                    }
+                }
+                // Renewal date business logic
+                if (renewalDate && completionDate) {
+                    const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+                    if (dateRegex.test(renewalDate) && dateRegex.test(completionDate)) {
+                        const renewalDateObj = new Date(renewalDate);
+                        const completionDateObj = new Date(completionDate);
+                        const daysDifference = Math.floor((renewalDateObj.getTime() - completionDateObj.getTime()) / (1000 * 3600 * 24));
+                        // Check for unusually short or long renewal periods
+                        if (daysDifference < 30) {
+                            record.addWarning("renewalDate", "Renewal period is less than 30 days - verify this is correct");
+                        }
+                        else if (daysDifference > 1095) { // 3 years
+                            record.addWarning("renewalDate", "Renewal period is more than 3 years - verify this is correct");
+                        }
+                    }
+                }
+                // Apply same individual record validations as the listener
+                // (This ensures consistency between real-time and batch validation)
+                // Required field validations
+                if (!externalId?.trim()) {
+                    record.addError("externalId", "External Id required");
+                }
+                if (!externalIdType?.trim()) {
+                    record.addError("externalIdType", "External Id Type required");
+                }
+                if (!recordName?.trim()) {
+                    record.addError("recordName", "Record Name required");
+                }
+                return record;
+            });
+            await event.data(validatedRecords);
+        }
+        catch (error) {
+            console.error("Error in Health Record validation:", error);
+            throw error;
+        }
+    });
+};
+exports.validateHealthRecordAction = validateHealthRecordAction;
+
+
+/***/ }),
+
 /***/ 91248:
 /***/ ((__unused_webpack_module, exports) => {
 
@@ -166237,6 +166706,236 @@ exports.validateOtherCertificationAction = validateOtherCertificationAction;
 
 /***/ }),
 
+/***/ 84381:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.validateOtherRecordAction = void 0;
+const validateOtherRecordAction = (listener) => {
+    listener.on("job:ready", { job: "sheet:validateOtherRecord" }, async ({ context: { jobId, sheetId }, ...event }) => {
+        try {
+            const { data: records } = await event.data;
+            // Track duplicates and cross-record validations
+            const externalIdMap = new Map();
+            const fileKeyMap = new Map();
+            const documentTypes = new Set();
+            const validatedRecords = records.map((record, index) => {
+                const externalId = record.get("externalId");
+                const externalIdType = record.get("externalIdType");
+                const type = record.get("type");
+                const name = record.get("name");
+                const issueDate = record.get("issueDate");
+                const expirationDate = record.get("expirationDate");
+                const fileKey = record.get("fileKey");
+                const user = record.get("user");
+                const recordViewableByProvider = record.get("recordViewableByProvider");
+                const fileViewableByProvider = record.get("fileViewableByProvider");
+                const classification = record.get("classification");
+                // Duplicate External ID detection
+                if (externalId && externalIdType) {
+                    const externalIdKey = `${externalId}|${externalIdType}`;
+                    if (externalIdMap.has(externalIdKey)) {
+                        const previousRow = externalIdMap.get(externalIdKey) + 1;
+                        record.addError("externalId", `Duplicate External ID and Type combination found. Previously used on row ${previousRow}`);
+                    }
+                    else {
+                        externalIdMap.set(externalIdKey, index);
+                    }
+                }
+                // Provider matching validation (simulated - would check against actual provider database)
+                if (externalId && externalIdType) {
+                    // Simulate provider not found scenario
+                    if (externalId === "NOTFOUND123") {
+                        record.addError("externalId", "No matching provider found");
+                    }
+                    // Simulate inactive provider scenario
+                    if (externalId.startsWith("INACTIVE")) {
+                        record.addWarning("externalId", "Provider was updated but is inactive");
+                    }
+                    // Simulate provider type validation
+                    if (externalIdType === "InvalidType") {
+                        record.addError("externalIdType", "Provider Type not defined for company");
+                    }
+                    // Simulate duplicate ID scenarios
+                    if (externalId.includes("DUPLICATE")) {
+                        record.addError("externalId", `${externalIdType} matches the ${externalIdType} of an existing provider`);
+                    }
+                }
+                // File Key business rules validation
+                if (fileKey) {
+                    // Track File Key usage for duplicate linking validation
+                    if (fileKeyMap.has(fileKey)) {
+                        const previousRow = fileKeyMap.get(fileKey) + 1;
+                        record.addWarning("fileKey", `File Key linked successfully but unlinked from Other Record - Row ${previousRow}`);
+                    }
+                    else {
+                        fileKeyMap.set(fileKey, index);
+                    }
+                    // File Key business rule validations (simulated scenarios)
+                    // File Key belongs to different company/provider
+                    if (fileKey.startsWith("00000000")) {
+                        record.addError("fileKey", "File Key invalid - does not belong to this company or provider");
+                    }
+                    // File Key not found in database
+                    if (fileKey.endsWith("NOTFOUND")) {
+                        record.addError("fileKey", "File not found");
+                    }
+                    // File type not able to be linked
+                    if (fileKey.includes("NOTYPE")) {
+                        record.addError("fileKey", "File type not able to be linked");
+                    }
+                    // Signable Document already linked
+                    if (fileKey.includes("SIGNED")) {
+                        record.addError("fileKey", "File already linked to another record and unable to be linked to a new record");
+                    }
+                    // Previous file unlinked scenario
+                    if (fileKey.includes("PREVIOUS")) {
+                        record.addWarning("fileKey", `File Key linked successfully but record's previous File Key (Previous_Document.pdf) has been unlinked`);
+                    }
+                }
+                // User validation against Cred Spec emails (simulated)
+                if (user && user.trim()) {
+                    // Simulate valid email addresses in the system
+                    const validCredSpecEmails = [
+                        "admin@hospital.com",
+                        "credentialing@hospital.com",
+                        "hr@hospital.com",
+                        "compliance@hospital.com",
+                        "medical.staff@hospital.com",
+                        "quality@hospital.com",
+                        "records@hospital.com",
+                        "system@hospital.com"
+                    ];
+                    // Check if user matches any valid email format or is in the valid list
+                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    if (!emailRegex.test(user) || !validCredSpecEmails.includes(user.toLowerCase())) {
+                        record.addError("user", "No User matches found");
+                    }
+                }
+                else {
+                    // Set default warning for empty user
+                    record.addWarning("user", "No User listed, so \"Credentialing System\" will be listed");
+                }
+                // Document type validation (collect types for analysis)
+                if (type && type.trim()) {
+                    documentTypes.add(type.trim());
+                    // Simulate document category validation
+                    const validDocumentCategories = [
+                        "Licenses and Certifications",
+                        "Education and Training",
+                        "Continuing Medical Education",
+                        "Work History and Affiliations",
+                        "Employee Documents",
+                        "Sanctions and Exclusions",
+                        "References",
+                        "Payer Documents"
+                    ];
+                    // More sophisticated document type validation
+                    if (!type.toLowerCase().includes("license") &&
+                        !type.toLowerCase().includes("certificate") &&
+                        !type.toLowerCase().includes("education") &&
+                        !type.toLowerCase().includes("training") &&
+                        !type.toLowerCase().includes("employment") &&
+                        !type.toLowerCase().includes("reference") &&
+                        !type.toLowerCase().includes("payer") &&
+                        !type.toLowerCase().includes("document")) {
+                        record.addError("type", "Document Category not supported");
+                    }
+                }
+                // Classification validation (simulated)
+                if (classification && classification.trim() && type && type.trim()) {
+                    // Simulate classification validation against configurable lists
+                    const validClassificationsByType = {
+                        "License": ["Medical License", "Professional License", "Specialty License"],
+                        "Certificate": ["Board Certification", "Training Certificate", "Continuing Education"],
+                        "Education": ["Medical Degree", "Residency", "Fellowship", "Continuing Education"],
+                        "Reference": ["Professional Reference", "Character Reference", "Academic Reference"]
+                    };
+                    // Simple validation based on type keywords
+                    let isValidClassification = false;
+                    for (const [typeKey, classifications] of Object.entries(validClassificationsByType)) {
+                        if (type.toLowerCase().includes(typeKey.toLowerCase())) {
+                            isValidClassification = classifications.some(c => classification.toLowerCase().includes(c.toLowerCase()) ||
+                                c.toLowerCase().includes(classification.toLowerCase()));
+                            if (isValidClassification)
+                                break;
+                        }
+                    }
+                    if (!isValidClassification && classification !== "General" && classification !== "Other") {
+                        record.addError("classification", "Classification not supported");
+                    }
+                }
+                // Record and File Viewable consistency checks
+                if (recordViewableByProvider === "F" && fileViewableByProvider === "T") {
+                    record.addWarning("fileViewableByProvider", "File Viewable by Provider must be set to 'F' on records where Record Viewable by Provider is set to 'F'");
+                }
+                // Document completeness validations
+                if (name && issueDate) {
+                    // Check for common document naming patterns
+                    const commonDocumentTypes = ["License", "Certificate", "Degree", "Reference", "Report"];
+                    const hasCommonPattern = commonDocumentTypes.some(docType => name.toLowerCase().includes(docType.toLowerCase()) ||
+                        (type && type.toLowerCase().includes(docType.toLowerCase())));
+                    if (!hasCommonPattern) {
+                        record.addInfo("name", "Consider using standard document naming conventions for consistency");
+                    }
+                    // Check for future issue dates
+                    const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+                    if (dateRegex.test(issueDate)) {
+                        const issueDateObj = new Date(issueDate);
+                        const currentDate = new Date();
+                        if (issueDateObj > currentDate) {
+                            record.addWarning("issueDate", "Issue date is in the future - please verify");
+                        }
+                    }
+                }
+                // Expiration date business logic
+                if (expirationDate && issueDate) {
+                    const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+                    if (dateRegex.test(expirationDate) && dateRegex.test(issueDate)) {
+                        const expirationDateObj = new Date(expirationDate);
+                        const issueDateObj = new Date(issueDate);
+                        const daysDifference = Math.floor((expirationDateObj.getTime() - issueDateObj.getTime()) / (1000 * 3600 * 24));
+                        // Check for unusually short or long validity periods
+                        if (daysDifference < 30) {
+                            record.addWarning("expirationDate", "Document validity period is less than 30 days - verify this is correct");
+                        }
+                        else if (daysDifference > 3650) { // 10 years
+                            record.addWarning("expirationDate", "Document validity period is more than 10 years - verify this is correct");
+                        }
+                    }
+                }
+                // Apply same individual record validations as the listener
+                // (This ensures consistency between real-time and batch validation)
+                // Required field validations
+                if (!externalId?.trim()) {
+                    record.addError("externalId", "External Id required");
+                }
+                if (!externalIdType?.trim()) {
+                    record.addError("externalIdType", "External Id Type required");
+                }
+                if (!type?.trim()) {
+                    record.addError("type", "Type required");
+                }
+                if (!name?.trim()) {
+                    record.addError("name", "Name required");
+                }
+                return record;
+            });
+            await event.data(validatedRecords);
+        }
+        catch (error) {
+            console.error("Error in Other Record validation:", error);
+            throw error;
+        }
+    });
+};
+exports.validateOtherRecordAction = validateOtherRecordAction;
+
+
+/***/ }),
+
 /***/ 77262:
 /***/ ((__unused_webpack_module, exports) => {
 
@@ -166503,6 +167202,145 @@ const validatePayerAction = (listener) => {
     });
 };
 exports.validatePayerAction = validatePayerAction;
+
+
+/***/ }),
+
+/***/ 52665:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.validateProfessionalReferenceAction = void 0;
+const validateProfessionalReferenceAction = (listener) => {
+    listener.on("job:ready", { job: "sheet:validateProfessionalReference" }, async ({ context: { jobId, sheetId }, ...event }) => {
+        try {
+            const { data: records } = await event.data;
+            // Track duplicates and cross-record validations
+            const externalIdMap = new Map();
+            const fileKeyMap = new Map();
+            const validatedRecords = records.map((record, index) => {
+                const externalId = record.get("externalId");
+                const externalIdType = record.get("externalIdType");
+                const fullName = record.get("fullName");
+                const fileKey = record.get("fileKey");
+                const recordViewableByProvider = record.get("recordViewableByProvider");
+                const fileViewableByProvider = record.get("fileViewableByProvider");
+                const fromDate = record.get("from");
+                const toDate = record.get("to");
+                const country = record.get("country");
+                const state = record.get("state");
+                // Duplicate External ID detection
+                if (externalId && externalIdType) {
+                    const externalIdKey = `${externalId}|${externalIdType}`;
+                    if (externalIdMap.has(externalIdKey)) {
+                        const previousRow = externalIdMap.get(externalIdKey) + 1;
+                        record.addError("externalId", `Duplicate External ID and Type combination found. Previously used on row ${previousRow}`);
+                    }
+                    else {
+                        externalIdMap.set(externalIdKey, index);
+                    }
+                }
+                // File Key uniqueness validation
+                if (fileKey) {
+                    if (fileKeyMap.has(fileKey)) {
+                        const previousRow = fileKeyMap.get(fileKey) + 1;
+                        record.addWarning("fileKey", `File Key linked successfully but unlinked from Professional Reference - Row ${previousRow}`);
+                    }
+                    else {
+                        fileKeyMap.set(fileKey, index);
+                    }
+                }
+                // Provider matching validation (simulated - would check against actual provider database)
+                if (externalId && externalIdType) {
+                    // This would normally query the provider database
+                    // For now, we'll add a warning for demonstration
+                    if (externalId.startsWith("INACTIVE")) {
+                        record.addWarning("externalId", "Provider document updated, but provider is inactive");
+                    }
+                    // Simulate provider not found scenario
+                    if (externalId === "NOTFOUND123") {
+                        record.addError("externalId", "No matching provider found");
+                    }
+                }
+                // Date range business logic validation
+                if (fromDate && toDate) {
+                    const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+                    if (dateRegex.test(fromDate) && dateRegex.test(toDate)) {
+                        const fromDateObj = new Date(fromDate);
+                        const toDateObj = new Date(toDate);
+                        if (fromDateObj > toDateObj) {
+                            record.addError("from", "From must be less than or equal to To.");
+                        }
+                        // Check for future dates (references should typically be historical)
+                        const currentDate = new Date();
+                        if (fromDateObj > currentDate) {
+                            record.addWarning("from", "Reference start date is in the future - please verify");
+                        }
+                    }
+                }
+                // Country and State consistency validation
+                if (country && state) {
+                    // This would normally validate against actual country/state combinations
+                    // For demonstration, we'll check common scenarios
+                    if (country.toUpperCase() === "CANADA" && state.length === 2 && !/^[A-Z]{2}$/.test(state)) {
+                        record.addError("state", "Canadian provinces should use 2-letter abbreviations");
+                    }
+                    if (country.toUpperCase() === "UNITED STATES" && state.length !== 2) {
+                        record.addError("state", "US states should use 2-letter abbreviations");
+                    }
+                }
+                // Record and File Viewable consistency checks
+                if (recordViewableByProvider === "F" && fileViewableByProvider === "T") {
+                    record.addWarning("fileViewableByProvider", "File Viewable by Provider must be set to 'F' on records where Record Viewable by Provider is set to 'F'");
+                }
+                // Professional relationship validation
+                if (fullName && externalId) {
+                    // Check for self-references (provider referencing themselves)
+                    if (fullName.toLowerCase().includes("self") || fullName.toLowerCase().includes("same")) {
+                        record.addWarning("fullName", "Self-references should be reviewed - ensure this is not the same provider");
+                    }
+                }
+                // File Key business rules validation
+                if (fileKey) {
+                    // Simulate file key validation scenarios
+                    if (fileKey.startsWith("00000000")) {
+                        record.addError("fileKey", "File Key invalid - does not belong to this company or provider");
+                    }
+                    if (fileKey.endsWith("9999")) {
+                        record.addError("fileKey", "File not found");
+                    }
+                    if (fileKey.includes("LINKED")) {
+                        record.addError("fileKey", "File already linked to another record and unable to be linked to a new record");
+                    }
+                    if (fileKey.includes("NOTYPE")) {
+                        record.addError("fileKey", "File type not able to be linked");
+                    }
+                }
+                // Apply same individual record validations as the listener
+                // (This ensures consistency between real-time and batch validation)
+                // Required field validations
+                if (!externalId?.trim()) {
+                    record.addError("externalId", "External Id required");
+                }
+                if (!externalIdType?.trim()) {
+                    record.addError("externalIdType", "External Id Type required");
+                }
+                if (!fullName?.trim()) {
+                    record.addError("fullName", "Full Name required");
+                }
+                return record;
+            });
+            await event.data(validatedRecords);
+        }
+        catch (error) {
+            console.error("Error in Professional Reference validation:", error);
+            throw error;
+        }
+    });
+};
+exports.validateProfessionalReferenceAction = validateProfessionalReferenceAction;
 
 
 /***/ }),
@@ -166996,6 +167834,203 @@ exports.validateProviderPayerEnrollmentDatesAction = validateProviderPayerEnroll
 
 /***/ }),
 
+/***/ 15379:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.validateProviderProfessionalAccountAction = void 0;
+const api_1 = __importDefault(__nccwpck_require__(45055));
+const validateProviderProfessionalAccountAction = (listener) => {
+    listener.filter({ job: "sheet:validateProviderProfessionalAccount" }, (configure) => {
+        configure.on("job:ready", async (event) => {
+            const { jobId, spaceId, sheetId } = event.context;
+            try {
+                // Get all records from the Provider Professional Account sheet
+                const response = await api_1.default.records.get(sheetId);
+                const records = response.data.records;
+                let processedCount = 0;
+                let errorCount = 0;
+                let warningCount = 0;
+                const batchErrors = [];
+                const batchWarnings = [];
+                // Update job progress
+                await api_1.default.jobs.update(jobId, {
+                    progress: 10,
+                    info: `Starting validation of ${records.length} Provider Professional Account records...`
+                });
+                // Batch validation logic
+                for (let i = 0; i < records.length; i++) {
+                    const record = records[i];
+                    const recordNumber = i + 1;
+                    try {
+                        // Cross-record validations
+                        await performCrossRecordValidations(record, records, recordNumber, batchErrors, batchWarnings);
+                        processedCount++;
+                        // Update progress every 50 records
+                        if (processedCount % 50 === 0) {
+                            await api_1.default.jobs.update(jobId, {
+                                progress: 10 + Math.floor((processedCount / records.length) * 80),
+                                info: `Processed ${processedCount} of ${records.length} records...`
+                            });
+                        }
+                    }
+                    catch (error) {
+                        errorCount++;
+                        batchErrors.push(`Row ${recordNumber}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                    }
+                }
+                // Final validation summary
+                const validRecordsCount = processedCount - errorCount;
+                warningCount = batchWarnings.length;
+                const completionSummary = [
+                    `Provider Professional Account Validation Complete`,
+                    `Total Records: ${records.length}`,
+                    `Valid Records: ${validRecordsCount}`,
+                    `Records with Errors: ${errorCount}`,
+                    `Records with Warnings: ${warningCount}`,
+                    ``,
+                    `Key Validations Performed:`,
+                    `- External ID and Type validation`,
+                    `- Account Name validation`,
+                    `- Character limit validation`,
+                    `- Date format validation`,
+                    `- Duplicate External ID detection`,
+                    `- Cross-record consistency checks`
+                ];
+                if (batchErrors.length > 0) {
+                    completionSummary.push(``, `Errors Found:`);
+                    completionSummary.push(...batchErrors.slice(0, 25)); // Limit to first 25 errors
+                    if (batchErrors.length > 25) {
+                        completionSummary.push(`... and ${batchErrors.length - 25} more errors`);
+                    }
+                }
+                if (batchWarnings.length > 0) {
+                    completionSummary.push(``, `Warnings Found:`);
+                    completionSummary.push(...batchWarnings.slice(0, 15)); // Limit to first 15 warnings
+                    if (batchWarnings.length > 15) {
+                        completionSummary.push(`... and ${batchWarnings.length - 15} more warnings`);
+                    }
+                }
+                await api_1.default.jobs.complete(jobId, {
+                    outcome: {
+                        message: completionSummary.join('\n'),
+                        acknowledge: true
+                    }
+                });
+            }
+            catch (error) {
+                await api_1.default.jobs.fail(jobId, {
+                    outcome: {
+                        message: `Provider Professional Account validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                        acknowledge: true
+                    }
+                });
+            }
+        });
+    });
+};
+exports.validateProviderProfessionalAccountAction = validateProviderProfessionalAccountAction;
+async function performCrossRecordValidations(record, allRecords, recordNumber, batchErrors, batchWarnings) {
+    const externalId = record.values?.external_id?.value;
+    const externalIdType = record.values?.external_id_type?.value;
+    const accountName = record.values?.account_name?.value;
+    const username = record.values?.username?.value;
+    const id = record.values?.id?.value;
+    const expirationDate = record.values?.expiration_date?.value;
+    // Duplicate External ID + External ID Type validation
+    if (externalId && externalIdType) {
+        const duplicates = allRecords.filter((otherRecord, index) => index !== recordNumber - 1 && // Don't compare with self
+            otherRecord.values?.external_id?.value === externalId &&
+            otherRecord.values?.external_id_type?.value === externalIdType);
+        if (duplicates.length > 0) {
+            batchErrors.push(`Row ${recordNumber}: Duplicate External ID "${externalId}" (${externalIdType}) found in file`);
+        }
+    }
+    // Duplicate Account Name + External ID validation
+    if (accountName && externalId && externalIdType) {
+        const accountDuplicates = allRecords.filter((otherRecord, index) => index !== recordNumber - 1 && // Don't compare with self
+            otherRecord.values?.account_name?.value === accountName &&
+            otherRecord.values?.external_id?.value === externalId &&
+            otherRecord.values?.external_id_type?.value === externalIdType);
+        if (accountDuplicates.length > 0) {
+            batchErrors.push(`Row ${recordNumber}: Duplicate account "${accountName}" for provider "${externalId}" (${externalIdType})`);
+        }
+    }
+    // Username uniqueness within same account validation
+    if (username && username.trim() && accountName && accountName.trim()) {
+        const usernameDuplicates = allRecords.filter((otherRecord, index) => index !== recordNumber - 1 && // Don't compare with self
+            otherRecord.values?.username?.value === username &&
+            otherRecord.values?.account_name?.value === accountName);
+        if (usernameDuplicates.length > 0) {
+            batchWarnings.push(`Row ${recordNumber}: Username "${username}" appears multiple times for account "${accountName}"`);
+        }
+    }
+    // ID field uniqueness validation (if provided)
+    if (id && id.trim()) {
+        const idDuplicates = allRecords.filter((otherRecord, index) => index !== recordNumber - 1 && // Don't compare with self
+            otherRecord.values?.id?.value === id);
+        if (idDuplicates.length > 0) {
+            batchWarnings.push(`Row ${recordNumber}: ID "${id}" appears multiple times in file`);
+        }
+    }
+    // Expiration date validation (should be in the future)
+    if (expirationDate && expirationDate.trim()) {
+        try {
+            const [month, day, year] = expirationDate.trim().split('/').map(Number);
+            const expirationDateObj = new Date(year, month - 1, day);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0); // Reset time to start of day for comparison
+            if (expirationDateObj < today) {
+                batchWarnings.push(`Row ${recordNumber}: Expiration Date "${expirationDate}" is in the past`);
+            }
+            // Warn about expiration within 30 days
+            const thirtyDaysFromNow = new Date();
+            thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+            if (expirationDateObj <= thirtyDaysFromNow && expirationDateObj >= today) {
+                batchWarnings.push(`Row ${recordNumber}: Account expires within 30 days (${expirationDate})`);
+            }
+        }
+        catch (error) {
+            // Date parsing errors already handled in individual record validation
+        }
+    }
+    // Account name pattern validation
+    if (accountName && accountName.trim()) {
+        const account = accountName.trim();
+        // Check for common account naming patterns
+        const systemAccountPatterns = /^(system|admin|root|test|demo)$/i;
+        if (systemAccountPatterns.test(account)) {
+            batchWarnings.push(`Row ${recordNumber}: Account name "${account}" appears to be a system account`);
+        }
+        // Check for very short account names
+        if (account.length < 3) {
+            batchWarnings.push(`Row ${recordNumber}: Account name "${account}" is very short - verify this is correct`);
+        }
+    }
+    // Cross-validation of provider data consistency
+    if (externalId && externalIdType) {
+        // Find all records for same provider
+        const providerRecords = allRecords.filter((otherRecord, index) => otherRecord.values?.external_id?.value === externalId &&
+            otherRecord.values?.external_id_type?.value === externalIdType);
+        if (providerRecords.length > 1) {
+            // Check for consistent account names across same provider
+            const accountNames = providerRecords.map(r => r.values?.account_name?.value).filter(Boolean);
+            const uniqueAccountNames = [...new Set(accountNames)];
+            if (uniqueAccountNames.length > 3) {
+                batchWarnings.push(`Row ${recordNumber}: Provider has accounts across ${uniqueAccountNames.length} different systems - verify this is expected`);
+            }
+        }
+    }
+}
+
+
+/***/ }),
+
 /***/ 15611:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
@@ -167107,6 +168142,400 @@ exports.stateLicenseValidationHook = (0, plugin_record_hook_1.recordHook)('state
     }
     return record;
 });
+
+
+/***/ }),
+
+/***/ 39172:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.validateWorkGapAction = void 0;
+const validateWorkGapAction = (listener) => {
+    listener.on("job:ready", { job: "sheet:validateWorkGap" }, async ({ context: { jobId, sheetId }, ...event }) => {
+        try {
+            const { data: records } = await event.data;
+            // Track duplicates and cross-record validations
+            const externalIdMap = new Map();
+            const fileKeyMap = new Map();
+            const gapPeriods = new Map();
+            const validatedRecords = records.map((record, index) => {
+                const externalId = record.get("externalId");
+                const externalIdType = record.get("externalIdType");
+                const reason = record.get("reason");
+                const startDate = record.get("startDate");
+                const endDate = record.get("endDate");
+                const explanation = record.get("explanation");
+                const fileKey = record.get("fileKey");
+                const user = record.get("user");
+                const recordViewableByProvider = record.get("recordViewableByProvider");
+                const fileViewableByProvider = record.get("fileViewableByProvider");
+                // Duplicate External ID detection (combining with Start Date and End Date as they are key fields)
+                if (externalId && externalIdType && startDate && endDate) {
+                    const externalIdKey = `${externalId}|${externalIdType}|${startDate}|${endDate}`;
+                    if (externalIdMap.has(externalIdKey)) {
+                        const previousRow = externalIdMap.get(externalIdKey) + 1;
+                        record.addError("externalId", `Duplicate External ID, Type, Start Date, and End Date combination found. Previously used on row ${previousRow}`);
+                    }
+                    else {
+                        externalIdMap.set(externalIdKey, index);
+                    }
+                }
+                // Provider matching validation (simulated - would check against actual provider database)
+                if (externalId && externalIdType) {
+                    // Simulate provider not found scenario
+                    if (externalId === "NOTFOUND123") {
+                        record.addError("externalId", "No matching provider found");
+                    }
+                    // Simulate inactive provider scenario
+                    if (externalId.startsWith("INACTIVE")) {
+                        record.addWarning("externalId", "Provider was updated but is inactive");
+                    }
+                    // Simulate duplicate ID scenarios
+                    if (externalId.includes("DUPLICATE")) {
+                        record.addError("externalId", `${externalIdType} matches the ${externalIdType} of an existing provider`);
+                    }
+                }
+                // Track overlapping work gap periods for the same provider
+                if (externalId && externalIdType && startDate && endDate) {
+                    const providerKey = `${externalId}|${externalIdType}`;
+                    const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+                    if (dateRegex.test(startDate) && dateRegex.test(endDate)) {
+                        const startDateObj = new Date(startDate);
+                        const endDateObj = new Date(endDate);
+                        if (!gapPeriods.has(providerKey)) {
+                            gapPeriods.set(providerKey, []);
+                        }
+                        const periods = gapPeriods.get(providerKey);
+                        // Check for overlapping periods
+                        for (const period of periods) {
+                            if ((startDateObj <= period.endDate && endDateObj >= period.startDate)) {
+                                const overlapRow = period.index + 1;
+                                record.addWarning("startDate", `Work gap period overlaps with gap period on row ${overlapRow}`);
+                                break;
+                            }
+                        }
+                        periods.push({ startDate: startDateObj, endDate: endDateObj, index });
+                    }
+                }
+                // File Key business rules validation
+                if (fileKey) {
+                    // Track File Key usage for duplicate linking validation
+                    if (fileKeyMap.has(fileKey)) {
+                        const previousRow = fileKeyMap.get(fileKey) + 1;
+                        record.addWarning("fileKey", `File Key linked successfully but unlinked from Work Gap - Row ${previousRow}`);
+                    }
+                    else {
+                        fileKeyMap.set(fileKey, index);
+                    }
+                    // File Key business rule validations (simulated scenarios)
+                    // File Key belongs to different company/provider
+                    if (fileKey.startsWith("00000000")) {
+                        record.addError("fileKey", "File Key invalid - does not belong to this company or provider");
+                    }
+                    // File Key not found in database
+                    if (fileKey.endsWith("NOTFOUND")) {
+                        record.addError("fileKey", "File not found");
+                    }
+                    // File type not able to be linked
+                    if (fileKey.includes("NOTYPE")) {
+                        record.addError("fileKey", "File type not able to be linked");
+                    }
+                    // Signable Document already linked
+                    if (fileKey.includes("SIGNED")) {
+                        record.addError("fileKey", "File already linked to another record and unable to be linked to a new record");
+                    }
+                    // Previous file unlinked scenario
+                    if (fileKey.includes("PREVIOUS")) {
+                        record.addWarning("fileKey", `File Key linked successfully but record's previous File Key (Previous_Document.pdf) has been unlinked`);
+                    }
+                }
+                // User validation against Cred Spec emails (simulated)
+                if (user && user.trim()) {
+                    // Simulate valid email addresses in the system
+                    const validCredSpecEmails = [
+                        "admin@hospital.com",
+                        "credentialing@hospital.com",
+                        "hr@hospital.com",
+                        "compliance@hospital.com",
+                        "medical.staff@hospital.com",
+                        "quality@hospital.com",
+                        "records@hospital.com",
+                        "system@hospital.com"
+                    ];
+                    // Check if user matches any valid email format or is in the valid list
+                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    if (!emailRegex.test(user) || !validCredSpecEmails.includes(user.toLowerCase())) {
+                        record.addError("user", "No User matches found");
+                    }
+                }
+                else {
+                    // Set default warning for empty user
+                    record.addWarning("user", "No User listed, so \"Credentialing System\" will be listed");
+                }
+                // Work gap business logic validations
+                if (reason && startDate && endDate) {
+                    const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+                    if (dateRegex.test(startDate) && dateRegex.test(endDate)) {
+                        const startDateObj = new Date(startDate);
+                        const endDateObj = new Date(endDate);
+                        const gapDuration = Math.floor((endDateObj.getTime() - startDateObj.getTime()) / (1000 * 3600 * 24));
+                        // Validate gap duration against reason
+                        if (reason.toLowerCase().includes("maternity") || reason.toLowerCase().includes("paternity")) {
+                            if (gapDuration > 365) {
+                                record.addWarning("reason", "Maternity/Paternity leave longer than 1 year - verify this is correct");
+                            }
+                        }
+                        if (reason.toLowerCase().includes("medical")) {
+                            if (gapDuration > 730) { // 2 years
+                                record.addWarning("reason", "Medical leave longer than 2 years - verify this is correct");
+                            }
+                        }
+                        if (reason.toLowerCase().includes("sabbatical")) {
+                            if (gapDuration < 90 || gapDuration > 365) {
+                                record.addInfo("reason", "Sabbatical periods typically range from 3 months to 1 year");
+                            }
+                        }
+                        // Check for gaps in distant past
+                        const currentDate = new Date();
+                        const yearsAgo = Math.floor((currentDate.getTime() - endDateObj.getTime()) / (1000 * 3600 * 24 * 365));
+                        if (yearsAgo > 20) {
+                            record.addWarning("endDate", "Work gap ended more than 20 years ago - verify this is relevant for current credentialing");
+                        }
+                    }
+                }
+                // Record and File Viewable consistency checks
+                if (recordViewableByProvider === "F" && fileViewableByProvider === "T") {
+                    record.addWarning("fileViewableByProvider", "File Viewable by Provider must be set to 'F' on records where Record Viewable by Provider is set to 'F'");
+                }
+                // Work gap completeness checks
+                if (startDate && endDate && !reason) {
+                    record.addWarning("reason", "Consider providing a reason for the work gap for documentation purposes");
+                }
+                if (reason && reason.trim() && !explanation) {
+                    const reasonLower = reason.toLowerCase();
+                    if (reasonLower.includes("medical") || reasonLower.includes("personal") || reasonLower.includes("family")) {
+                        record.addInfo("explanation", "Consider providing additional explanation for sensitive gap reasons");
+                    }
+                }
+                // Apply same individual record validations as the listener
+                // (This ensures consistency between real-time and batch validation)
+                // Required field validations
+                if (!externalId?.trim()) {
+                    record.addError("externalId", "External Id required");
+                }
+                if (!externalIdType?.trim()) {
+                    record.addError("externalIdType", "External Id Type required");
+                }
+                if (!startDate?.trim()) {
+                    record.addError("startDate", "Start Date is required");
+                }
+                if (!endDate?.trim()) {
+                    record.addError("endDate", "End Date is required");
+                }
+                return record;
+            });
+            await event.data(validatedRecords);
+        }
+        catch (error) {
+            console.error("Error in Work Gap validation:", error);
+            throw error;
+        }
+    });
+};
+exports.validateWorkGapAction = validateWorkGapAction;
+
+
+/***/ }),
+
+/***/ 68444:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.validateWorkHistoryAction = void 0;
+const validateWorkHistoryAction = (listener) => {
+    listener.on("job:ready", { job: "sheet:validateWorkHistory" }, async ({ context: { jobId, sheetId }, ...event }) => {
+        try {
+            const { data: records } = await event.data;
+            // Track external IDs for duplicate detection
+            const externalIdMap = new Map();
+            const duplicateExternalIds = new Set();
+            // Track File Keys for cross-record validation
+            const fileKeyMap = new Map();
+            const duplicateFileKeys = new Set();
+            // First pass: identify duplicates and build maps
+            records.forEach((record, index) => {
+                const externalId = record.get("external_id");
+                const externalIdType = record.get("external_id_type");
+                const fileKey = record.get("file_key");
+                // Track External ID duplicates
+                if (externalId?.trim()) {
+                    const idKey = `${externalIdType}:${externalId}`.toLowerCase();
+                    if (externalIdMap.has(idKey)) {
+                        duplicateExternalIds.add(idKey);
+                    }
+                    else {
+                        externalIdMap.set(idKey, index);
+                    }
+                }
+                // Track File Key usage
+                if (fileKey?.trim()) {
+                    if (fileKeyMap.has(fileKey)) {
+                        duplicateFileKeys.add(fileKey);
+                    }
+                    else {
+                        fileKeyMap.set(fileKey, `Record ${index + 1}`);
+                    }
+                }
+            });
+            // Second pass: apply validations
+            const validatedRecords = records.map((record, index) => {
+                const externalId = record.get("external_id");
+                const externalIdType = record.get("external_id_type");
+                const nameOfFacilityEmployer = record.get("name_of_facility_employer");
+                const department = record.get("department");
+                const role = record.get("role");
+                const startDate = record.get("start_date");
+                const endDate = record.get("end_date");
+                const reasonForLeaving = record.get("reason_for_leaving");
+                const addressLine1 = record.get("address_line_1");
+                const addressLine2 = record.get("address_line_2");
+                const city = record.get("city");
+                const county = record.get("county");
+                const state = record.get("state");
+                const zip = record.get("zip");
+                const country = record.get("country");
+                const contactName = record.get("contact_name");
+                const contactTitlePosition = record.get("contact_title_position");
+                const phoneNumber = record.get("phone_number");
+                const ext = record.get("ext");
+                const email = record.get("email");
+                const fax = record.get("fax");
+                const recordViewableByProvider = record.get("record_viewable_by_provider");
+                const fileViewableByProvider = record.get("file_viewable_by_provider");
+                const fileKey = record.get("file_key");
+                const note = record.get("note");
+                const user = record.get("user");
+                const timestamp = record.get("timestamp");
+                // Duplicate External ID validation
+                if (externalId?.trim()) {
+                    const idKey = `${externalIdType}:${externalId}`.toLowerCase();
+                    if (duplicateExternalIds.has(idKey)) {
+                        record.addError("external_id", "Duplicate External ID found in import file");
+                    }
+                }
+                // Provider matching validation (simulated - would connect to actual provider database)
+                if (externalId?.trim() && externalIdType?.trim()) {
+                    // This would typically check against the provider database
+                    // For now, we'll add a warning for demonstration
+                    if (externalIdType === "NPI" && externalId.length !== 10) {
+                        record.addError("external_id", "NPI must be 10 digits");
+                    }
+                    // Simulate provider lookup error
+                    if (externalId === "NOTFOUND") {
+                        record.addError("external_id", "No matching provider found");
+                    }
+                }
+                // File Key business rules validation
+                if (fileKey?.trim()) {
+                    // Check for duplicate File Keys in current import
+                    if (duplicateFileKeys.has(fileKey)) {
+                        record.addWarning("file_key", `File Key linked successfully but unlinked from other record in this import`);
+                    }
+                    // Validate GUID format (additional check beyond field-level validation)
+                    const guidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+                    if (!guidRegex.test(fileKey)) {
+                        record.addError("file_key", "File Key must be a valid GUID");
+                    }
+                    // Simulate File Key validation errors (would connect to actual file system)
+                    if (fileKey === "00000000-0000-0000-0000-000000000000") {
+                        record.addError("file_key", "File not found");
+                    }
+                    if (fileKey.startsWith("INVALID-")) {
+                        record.addError("file_key", "File Key invalid - does not belong to this company or provider");
+                    }
+                    if (fileKey.startsWith("LINKED-")) {
+                        record.addError("file_key", "File already linked to another record and unable to be linked to a new record");
+                    }
+                    if (fileKey.startsWith("TYPE-")) {
+                        record.addError("file_key", "File type not able to be linked");
+                    }
+                }
+                // User validation against Cred Spec emails (simulated)
+                if (user?.trim()) {
+                    // This would typically validate against the actual Cred Spec email list
+                    const validUserEmailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    if (!validUserEmailPattern.test(user)) {
+                        record.addError("user", "No User matches found");
+                    }
+                    // Simulate user validation
+                    if (user === "invalid@example.com") {
+                        record.addError("user", "No User matches found");
+                    }
+                }
+                // Cross-field date validation
+                if (startDate && endDate) {
+                    const startDateObj = new Date(startDate);
+                    const endDateObj = new Date(endDate);
+                    if (startDateObj > endDateObj) {
+                        record.addError("end_date", "End Date must be after Start Date");
+                    }
+                }
+                // Country and State cross-validation
+                if (country && state) {
+                    // This would typically validate against actual country/state data
+                    // For demonstration, we'll check some common patterns
+                    if (country === "United States" || country === "US") {
+                        // Validate US state codes or names
+                        const usStates = ["AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"];
+                        if (!usStates.includes(state.toUpperCase())) {
+                            record.addWarning("state", `${state} is not a valid subdivison value for Country.`);
+                        }
+                    }
+                }
+                // State validation when updating existing records (simulated)
+                if (state && !country) {
+                    // This would check if record exists and has different country/state
+                    record.addError("state", "Country and State must be provided when updating State.");
+                }
+                // Work history completeness validation
+                if (nameOfFacilityEmployer?.trim()) {
+                    // Validate that key work history fields are provided for meaningful records
+                    if (!startDate?.trim()) {
+                        record.addWarning("start_date", "Start Date recommended for complete work history records");
+                    }
+                    if (!role?.trim() && !department?.trim()) {
+                        record.addWarning("role", "Role or Department recommended for complete work history records");
+                    }
+                }
+                // Current position logic validation
+                if (endDate?.trim()) {
+                    // If end date is provided, we can validate it's not in the future (for completed positions)
+                    const endDateObj = new Date(endDate);
+                    const today = new Date();
+                    if (endDateObj > today) {
+                        record.addWarning("end_date", "End Date is in the future - verify if this is a current position");
+                    }
+                }
+                // Provider inactive status simulation (would connect to actual provider status)
+                if (externalId === "INACTIVE123") {
+                    record.addWarning("external_id", "Provider was updated but is inactive.");
+                }
+                return record;
+            });
+            await event.data(validatedRecords);
+        }
+        catch (error) {
+            console.error("Error in Work History validation:", error);
+            throw error;
+        }
+    });
+};
+exports.validateWorkHistoryAction = validateWorkHistoryAction;
 
 
 /***/ }),
@@ -170838,6 +172267,509 @@ exports.educationSheet = {
 
 /***/ }),
 
+/***/ 99070:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.fileDetailsSheet = void 0;
+exports.fileDetailsSheet = {
+    name: "File Details",
+    slug: "file-details",
+    access: ["*"],
+    fields: [
+        // Dummy Field (per specification)
+        {
+            key: "providerName",
+            type: "string",
+            label: "Provider Name",
+            description: "Dummy field - Provider Name (required for template structure)"
+        },
+        // Key Fields (Required)
+        {
+            key: "externalId",
+            type: "string",
+            label: "External ID",
+            description: "Key field for updating, Required field",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "externalIdType",
+            type: "string",
+            label: "External ID Type",
+            description: "Key field for updating, Required field",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "fileName",
+            type: "string",
+            label: "File Name",
+            description: "Optional, only provide a value when updating (max 250 characters). Cannot be 'None'. Extension will be appended automatically."
+        },
+        {
+            key: "fileKey",
+            type: "string",
+            label: "File Key",
+            description: "Key field for updating, Required field - GUID format (XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        // File Metadata Fields
+        {
+            key: "fileCategory",
+            type: "string",
+            label: "File Category",
+            description: "File Category - must match dropdown values. Required if File Type is provided. 'None' will clear existing information."
+        },
+        {
+            key: "fileType",
+            type: "string",
+            label: "File Type",
+            description: "File Type - must match dropdown values for selected File Category. 'Signable Document' requires PDF format. 'None' will clear existing information."
+        },
+        {
+            key: "fileDescription",
+            type: "string",
+            label: "File Description",
+            description: "File Description (max 10000 characters). 'None' will clear existing information."
+        },
+        // Standard X1-X10 Custom Fields
+        {
+            key: "x1",
+            type: "string",
+            label: "X1",
+            description: "Custom field X1"
+        },
+        {
+            key: "x2",
+            type: "string",
+            label: "X2",
+            description: "Custom field X2"
+        },
+        {
+            key: "x3",
+            type: "string",
+            label: "X3",
+            description: "Custom field X3"
+        },
+        {
+            key: "x4",
+            type: "string",
+            label: "X4",
+            description: "Custom field X4"
+        },
+        {
+            key: "x5",
+            type: "string",
+            label: "X5",
+            description: "Custom field X5"
+        },
+        {
+            key: "x6",
+            type: "string",
+            label: "X6",
+            description: "Custom field X6"
+        },
+        {
+            key: "x7",
+            type: "string",
+            label: "X7",
+            description: "Custom field X7"
+        },
+        {
+            key: "x8",
+            type: "string",
+            label: "X8",
+            description: "Custom field X8"
+        },
+        {
+            key: "x9",
+            type: "string",
+            label: "X9",
+            description: "Custom field X9"
+        },
+        {
+            key: "x10",
+            type: "string",
+            label: "X10",
+            description: "Custom field X10"
+        }
+    ],
+    actions: [
+        {
+            operation: "validateFileDetails",
+            mode: "foreground",
+            label: "Validate File Details",
+            description: "Validate file details data with comprehensive business rules and file management validation"
+        }
+    ]
+};
+
+
+/***/ }),
+
+/***/ 30097:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.globalPrivilegeSheet = void 0;
+exports.globalPrivilegeSheet = {
+    name: "Global Privilege",
+    slug: "global-privilege",
+    access: ["*"],
+    fields: [
+        // Required Fields (per specification)
+        {
+            key: "privilegeName",
+            type: "string",
+            label: "Privilege Name",
+            description: "Required field - Name of the global privilege (max 100 characters)",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "icdCptCode",
+            type: "string",
+            label: "ICD/CPT Code",
+            description: "Required field - ICD or CPT code associated with the privilege (max 50 characters)",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "specialty",
+            type: "string",
+            label: "Specialty",
+            description: "Required field - Medical specialty, use pipe (|) delimiter for multiple values (max 100 characters total)",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        // Optional Fields
+        {
+            key: "subspecialty",
+            type: "string",
+            label: "Subspecialty",
+            description: "Medical subspecialty, use pipe (|) delimiter for multiple values (max 100 characters total)"
+        },
+        {
+            key: "description",
+            type: "string",
+            label: "Description",
+            description: "Detailed description of the global privilege (max 10000 characters)"
+        },
+        // Standard X1-X10 Custom Fields
+        {
+            key: "x1",
+            type: "string",
+            label: "X1",
+            description: "Custom field X1"
+        },
+        {
+            key: "x2",
+            type: "string",
+            label: "X2",
+            description: "Custom field X2"
+        },
+        {
+            key: "x3",
+            type: "string",
+            label: "X3",
+            description: "Custom field X3"
+        },
+        {
+            key: "x4",
+            type: "string",
+            label: "X4",
+            description: "Custom field X4"
+        },
+        {
+            key: "x5",
+            type: "string",
+            label: "X5",
+            description: "Custom field X5"
+        },
+        {
+            key: "x6",
+            type: "string",
+            label: "X6",
+            description: "Custom field X6"
+        },
+        {
+            key: "x7",
+            type: "string",
+            label: "X7",
+            description: "Custom field X7"
+        },
+        {
+            key: "x8",
+            type: "string",
+            label: "X8",
+            description: "Custom field X8"
+        },
+        {
+            key: "x9",
+            type: "string",
+            label: "X9",
+            description: "Custom field X9"
+        },
+        {
+            key: "x10",
+            type: "string",
+            label: "X10",
+            description: "Custom field X10"
+        }
+    ],
+    actions: [
+        {
+            operation: "validateGlobalPrivilege",
+            mode: "foreground",
+            label: "Validate Global Privilege",
+            description: "Validate global privilege data with comprehensive business rules and specialty validation"
+        }
+    ]
+};
+
+
+/***/ }),
+
+/***/ 66854:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.healthRecordSheet = void 0;
+exports.healthRecordSheet = {
+    name: "Health Record",
+    slug: "health-record",
+    access: ["*"],
+    fields: [
+        // Dummy Field (per specification)
+        {
+            key: "providerName",
+            type: "string",
+            label: "Provider Name",
+            description: "Dummy field - Provider Name (required for template structure)"
+        },
+        // Key Fields (Required)
+        {
+            key: "externalId",
+            type: "string",
+            label: "External ID",
+            description: "Key field for updating, Required field",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "externalIdType",
+            type: "string",
+            label: "External ID Type",
+            description: "Key field for updating, Required field",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "recordName",
+            type: "string",
+            label: "Record Name",
+            description: "Key field for updating, Required field - Name of the health record (max 50 characters)",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "examName",
+            type: "string",
+            label: "Exam Name",
+            description: "Key field for updating - Name of the examination or health screening"
+        },
+        {
+            key: "completionDate",
+            type: "string",
+            label: "Completion Date",
+            description: "Key field for updating - Date when the health record was completed (m/d/yyyy format). Must be before Renewal Date."
+        },
+        // Health Record Details
+        {
+            key: "renewalDate",
+            type: "string",
+            label: "Renewal Date",
+            description: "Date when the health record needs to be renewed (m/d/yyyy format)"
+        },
+        {
+            key: "monitorExpirationDate",
+            type: "enum",
+            label: "Monitor Expiration Date",
+            description: "Whether to monitor expiration date - T or F",
+            config: {
+                options: [
+                    { value: "T", label: "T" },
+                    { value: "F", label: "F" }
+                ]
+            }
+        },
+        {
+            key: "notes",
+            type: "string",
+            label: "Notes",
+            description: "Additional notes about the health record (max 500 characters)"
+        },
+        // Provider Visibility Fields
+        {
+            key: "recordViewableByProvider",
+            type: "enum",
+            label: "Record Viewable by Provider",
+            description: "Whether the record is viewable by provider - T or F",
+            config: {
+                options: [
+                    { value: "T", label: "T" },
+                    { value: "F", label: "F" }
+                ]
+            }
+        },
+        {
+            key: "fileViewableByProvider",
+            type: "enum",
+            label: "File Viewable by Provider",
+            description: "Whether the file is viewable by provider - T or F",
+            config: {
+                options: [
+                    { value: "T", label: "T" },
+                    { value: "F", label: "F" }
+                ]
+            }
+        },
+        // File Management Fields
+        {
+            key: "fileKey",
+            type: "string",
+            label: "File Key",
+            description: "File Key in GUID format (XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)"
+        },
+        // Additional Information Fields (added in 2024.07)
+        {
+            key: "note",
+            type: "string",
+            label: "Note",
+            description: "Additional note field (max 10000 characters) - added in 2024.07"
+        },
+        {
+            key: "user",
+            type: "string",
+            label: "User",
+            description: "User associated with the record - must match Cred Spec emails. Defaults to 'Credentialing System' if empty"
+        },
+        {
+            key: "timeStamp",
+            type: "string",
+            label: "TimeStamp",
+            description: "Timestamp in m/d/yyyy h:mm:ss format"
+        },
+        // Standard X1-X10 Custom Fields
+        {
+            key: "x1",
+            type: "string",
+            label: "X1",
+            description: "Custom field X1"
+        },
+        {
+            key: "x2",
+            type: "string",
+            label: "X2",
+            description: "Custom field X2"
+        },
+        {
+            key: "x3",
+            type: "string",
+            label: "X3",
+            description: "Custom field X3"
+        },
+        {
+            key: "x4",
+            type: "string",
+            label: "X4",
+            description: "Custom field X4"
+        },
+        {
+            key: "x5",
+            type: "string",
+            label: "X5",
+            description: "Custom field X5"
+        },
+        {
+            key: "x6",
+            type: "string",
+            label: "X6",
+            description: "Custom field X6"
+        },
+        {
+            key: "x7",
+            type: "string",
+            label: "X7",
+            description: "Custom field X7"
+        },
+        {
+            key: "x8",
+            type: "string",
+            label: "X8",
+            description: "Custom field X8"
+        },
+        {
+            key: "x9",
+            type: "string",
+            label: "X9",
+            description: "Custom field X9"
+        },
+        {
+            key: "x10",
+            type: "string",
+            label: "X10",
+            description: "Custom field X10"
+        }
+    ],
+    actions: [
+        {
+            operation: "validateHealthRecord",
+            mode: "foreground",
+            label: "Validate Health Record",
+            description: "Validate health record data with comprehensive business rules and provider matching"
+        }
+    ]
+};
+
+
+/***/ }),
+
 /***/ 73186:
 /***/ ((__unused_webpack_module, exports) => {
 
@@ -172421,6 +174353,243 @@ exports.otherCertificationSheet = {
 
 /***/ }),
 
+/***/ 12132:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.otherRecordSheet = void 0;
+/**
+ * Other Record Sheet Blueprint
+ *
+ * Manages general documentation and record imports for providers with:
+ * - Required external ID and document type fields
+ * - Flexible document categorization system
+ * - File linking capability with GUID validation
+ * - Provider and file viewability controls
+ * - Character limits and format validations
+ * - Classification system for document organization
+ * - 2024.07 additions for Note, User, and TimeStamp
+ */
+exports.otherRecordSheet = {
+    name: "Other Record Import Format",
+    slug: "other-record",
+    access: ["*"],
+    fields: [
+        // Key Fields
+        {
+            key: "providerName",
+            type: "string",
+            label: "Provider Name",
+            description: "Dummy field for provider identification"
+        },
+        {
+            key: "externalId",
+            type: "string",
+            label: "External ID",
+            description: "Key field for updating, Required field",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "externalIdType",
+            type: "string",
+            label: "External ID Type",
+            description: "Key field for updating, Required field",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        // Document Details
+        {
+            key: "type",
+            type: "string",
+            label: "Type",
+            description: "Required field - Type matches a value on Document Types. Valid categories: Licenses and Certifications, Education and Training, Continuing Medical Education, Work History and Affiliations, Employee Documents, Sanctions and Exclusions, References, Payer Documents",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "name",
+            type: "string",
+            label: "Name",
+            description: "Required field - Maximum 100 characters",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        // Date Fields
+        {
+            key: "issueDate",
+            type: "date",
+            label: "Issue Date",
+            description: "Format: m/d/yyyy. Issue Date cannot be after Expiration Date"
+        },
+        {
+            key: "expirationDate",
+            type: "date",
+            label: "Expiration Date?",
+            description: "Format: m/d/yyyy. Must be after Issue Date if both dates are provided"
+        },
+        // Monitoring and Visibility
+        {
+            key: "monitorExpirationDate",
+            type: "enum",
+            label: "Monitor Expiration Date",
+            description: "Must be T or F if not empty",
+            config: {
+                options: [
+                    { value: "", label: "" },
+                    { value: "T", label: "T" },
+                    { value: "F", label: "F" }
+                ]
+            }
+        },
+        {
+            key: "recordViewableByProvider",
+            type: "enum",
+            label: "Record Viewable by Provider",
+            description: "Must be T or F if not empty. If blank on ADD, uses company-level default. If blank on UPDATE, no change to saved value",
+            config: {
+                options: [
+                    { value: "", label: "" },
+                    { value: "T", label: "T" },
+                    { value: "F", label: "F" }
+                ]
+            }
+        },
+        {
+            key: "fileViewableByProvider",
+            type: "enum",
+            label: "File Viewable by Provider",
+            description: "Must be T or F if not empty. If blank on ADD, uses company-level default. If blank on UPDATE, no change to saved value",
+            config: {
+                options: [
+                    { value: "", label: "" },
+                    { value: "T", label: "T" },
+                    { value: "F", label: "F" }
+                ]
+            }
+        },
+        // File Management
+        {
+            key: "fileKey",
+            type: "string",
+            label: "File Key",
+            description: "GUID format: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX (8,4,4,4,12 characters)"
+        },
+        // 2024.07 Additions
+        {
+            key: "note",
+            type: "string",
+            label: "Note",
+            description: "Maximum 10,000 characters"
+        },
+        {
+            key: "user",
+            type: "string",
+            label: "User",
+            description: "If empty, 'Credentialing System' will be used - must match Cred Spec emails"
+        },
+        {
+            key: "timeStamp",
+            type: "string",
+            label: "TimeStamp",
+            description: "Format: m/d/yyyy h:mm:ss"
+        },
+        // Classification
+        {
+            key: "classification",
+            type: "string",
+            label: "Classification",
+            description: "Must match value in Settings > Configurable Lists for the record Type"
+        },
+        // Standard X1-X10 Custom Fields
+        {
+            key: "x1",
+            type: "string",
+            label: "X1",
+            description: "Custom field X1"
+        },
+        {
+            key: "x2",
+            type: "string",
+            label: "X2",
+            description: "Custom field X2"
+        },
+        {
+            key: "x3",
+            type: "string",
+            label: "X3",
+            description: "Custom field X3"
+        },
+        {
+            key: "x4",
+            type: "string",
+            label: "X4",
+            description: "Custom field X4"
+        },
+        {
+            key: "x5",
+            type: "string",
+            label: "X5",
+            description: "Custom field X5"
+        },
+        {
+            key: "x6",
+            type: "string",
+            label: "X6",
+            description: "Custom field X6"
+        },
+        {
+            key: "x7",
+            type: "string",
+            label: "X7",
+            description: "Custom field X7"
+        },
+        {
+            key: "x8",
+            type: "string",
+            label: "X8",
+            description: "Custom field X8"
+        },
+        {
+            key: "x9",
+            type: "string",
+            label: "X9",
+            description: "Custom field X9"
+        },
+        {
+            key: "x10",
+            type: "string",
+            label: "X10",
+            description: "Custom field X10"
+        }
+    ],
+    actions: [
+        {
+            operation: "validateOtherRecord",
+            mode: "foreground",
+            label: "Validate Other Record",
+            description: "Validate other record data with comprehensive business rules including document type validation, date cross-validation, and File Key business rules"
+        }
+    ]
+};
+
+
+/***/ }),
+
 /***/ 71789:
 /***/ ((__unused_webpack_module, exports) => {
 
@@ -173013,6 +175182,291 @@ exports.personalReferenceSheet = {
             mode: "foreground",
             label: "Validate Personal Reference Data",
             description: "Comprehensive validation of personal reference information with duplicate detection"
+        }
+    ]
+};
+
+
+/***/ }),
+
+/***/ 17452:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.professionalReferenceSheet = void 0;
+exports.professionalReferenceSheet = {
+    name: "Professional Reference",
+    slug: "professional-reference",
+    access: ["*"],
+    fields: [
+        // Dummy Field (per specification)
+        {
+            key: "providerName",
+            type: "string",
+            label: "Provider Name",
+            description: "Dummy field - Provider Name (required for template structure)"
+        },
+        // Key Fields (Required)
+        {
+            key: "externalId",
+            type: "string",
+            label: "External ID",
+            description: "Key field for updating, Required field",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "externalIdType",
+            type: "string",
+            label: "External ID Type",
+            description: "Key field for updating, Required field",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "fullName",
+            type: "string",
+            label: "Full Name",
+            description: "Key field for updating, Required field - Reference provider's full name (max 100 characters)",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        // Reference Information Fields
+        {
+            key: "relationship",
+            type: "string",
+            label: "Relationship",
+            description: "Relationship to the provider (max 100 characters)"
+        },
+        {
+            key: "specialty",
+            type: "string",
+            label: "Specialty",
+            description: "Medical specialty - must match values in Settings > Configurable Lists > Specialty"
+        },
+        {
+            key: "degreeProviderType",
+            type: "string",
+            label: "Degree/Provider Type",
+            description: "Degree or provider type - must match abbreviation from dropdown list"
+        },
+        {
+            key: "workedTogetherDuration",
+            type: "string",
+            label: "Worked together for how long?",
+            description: "Duration of professional relationship (max 50 characters)"
+        },
+        {
+            key: "facility",
+            type: "string",
+            label: "Facility",
+            description: "Associated healthcare facility (max 100 characters)"
+        },
+        // Contact Information Fields
+        {
+            key: "phoneNumber",
+            type: "string",
+            label: "Phone Number",
+            description: "Phone number - must be 9, 10, or 12 digits only (no formatting)"
+        },
+        {
+            key: "ext",
+            type: "string",
+            label: "Ext.",
+            description: "Phone extension - number up to 20 digits"
+        },
+        {
+            key: "email",
+            type: "string",
+            label: "Email",
+            description: "Email address - must follow username@domain.com format"
+        },
+        {
+            key: "fax",
+            type: "string",
+            label: "Fax",
+            description: "Fax number - must be 9, 10, or 12 digits only (no formatting)"
+        },
+        // Address Fields
+        {
+            key: "addressLine1",
+            type: "string",
+            label: "Address Line 1",
+            description: "Primary address line (max 100 characters)"
+        },
+        {
+            key: "addressLine2",
+            type: "string",
+            label: "Address Line 2",
+            description: "Secondary address line (max 50 characters)"
+        },
+        {
+            key: "city",
+            type: "string",
+            label: "City",
+            description: "City name (max 50 characters)"
+        },
+        {
+            key: "county",
+            type: "string",
+            label: "County",
+            description: "County name (max 100 characters)"
+        },
+        {
+            key: "state",
+            type: "string",
+            label: "State",
+            description: "State abbreviation - must match state dropdown values"
+        },
+        {
+            key: "zip",
+            type: "string",
+            label: "Zip",
+            description: "Zip code - maximum 10 alphanumeric characters"
+        },
+        {
+            key: "country",
+            type: "string",
+            label: "Country",
+            description: "Country name - must appear in company settings with Display = 'Y' (max 100 characters)"
+        },
+        // Provider Visibility Fields
+        {
+            key: "recordViewableByProvider",
+            type: "enum",
+            label: "Record Viewable by Provider",
+            description: "Whether the record is viewable by provider - T or F (defaults to company-level setting if blank)",
+            config: {
+                options: [
+                    { value: "T", label: "T" },
+                    { value: "F", label: "F" }
+                ]
+            }
+        },
+        {
+            key: "fileViewableByProvider",
+            type: "enum",
+            label: "File Viewable by Provider",
+            description: "Whether the file is viewable by provider - T or F (defaults to company-level setting if blank)",
+            config: {
+                options: [
+                    { value: "T", label: "T" },
+                    { value: "F", label: "F" }
+                ]
+            }
+        },
+        // File Management Fields
+        {
+            key: "fileKey",
+            type: "string",
+            label: "File Key",
+            description: "File Key in GUID format (XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)"
+        },
+        // Date Range Fields
+        {
+            key: "from",
+            type: "string",
+            label: "From",
+            description: "Start date in m/d/yyyy format"
+        },
+        {
+            key: "to",
+            type: "string",
+            label: "To",
+            description: "End date in m/d/yyyy format"
+        },
+        // Status Fields
+        {
+            key: "active",
+            type: "enum",
+            label: "Active",
+            description: "Active status - T or F (defaults to T if blank on ADD)",
+            config: {
+                options: [
+                    { value: "T", label: "T" },
+                    { value: "F", label: "F" }
+                ]
+            }
+        },
+        // Standard X1-X10 Custom Fields
+        {
+            key: "x1",
+            type: "string",
+            label: "X1",
+            description: "Custom field X1"
+        },
+        {
+            key: "x2",
+            type: "string",
+            label: "X2",
+            description: "Custom field X2"
+        },
+        {
+            key: "x3",
+            type: "string",
+            label: "X3",
+            description: "Custom field X3"
+        },
+        {
+            key: "x4",
+            type: "string",
+            label: "X4",
+            description: "Custom field X4"
+        },
+        {
+            key: "x5",
+            type: "string",
+            label: "X5",
+            description: "Custom field X5"
+        },
+        {
+            key: "x6",
+            type: "string",
+            label: "X6",
+            description: "Custom field X6"
+        },
+        {
+            key: "x7",
+            type: "string",
+            label: "X7",
+            description: "Custom field X7"
+        },
+        {
+            key: "x8",
+            type: "string",
+            label: "X8",
+            description: "Custom field X8"
+        },
+        {
+            key: "x9",
+            type: "string",
+            label: "X9",
+            description: "Custom field X9"
+        },
+        {
+            key: "x10",
+            type: "string",
+            label: "X10",
+            description: "Custom field X10"
+        }
+    ],
+    actions: [
+        {
+            operation: "validateProfessionalReference",
+            mode: "foreground",
+            label: "Validate Professional Reference",
+            description: "Validate professional reference data with comprehensive business rules and provider matching"
         }
     ]
 };
@@ -174152,6 +176606,174 @@ exports.providerPrivilegesSheet = {
 
 /***/ }),
 
+/***/ 23356:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.providerProfessionalAccountSheet = void 0;
+// Provider Professional Account Import Format sheet configuration
+exports.providerProfessionalAccountSheet = {
+    name: "Provider Professional Account Import Format",
+    slug: "provider_professional_account",
+    access: ["*"],
+    fields: [
+        // Core Required Fields (Key fields for updating)
+        {
+            key: "provider_name",
+            type: "string",
+            label: "Provider Name",
+            description: "Dummy Field - Key field for updating"
+        },
+        {
+            key: "external_id",
+            type: "string",
+            label: "External ID",
+            description: "Required field - Key field for updating",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "external_id_type",
+            type: "enum",
+            label: "External ID Type",
+            description: "Required field - Key field for updating. Must be one of: NPI, InternalID, ProviderID, EmrID, BillingSystemID",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ],
+            config: {
+                options: [
+                    { value: "NPI", label: "NPI" },
+                    { value: "InternalID", label: "InternalID" },
+                    { value: "ProviderID", label: "ProviderID" },
+                    { value: "EmrID", label: "EmrID" },
+                    { value: "BillingSystemID", label: "BillingSystemID" }
+                ]
+            }
+        },
+        {
+            key: "account_name",
+            type: "string",
+            label: "Account Name",
+            description: "Required field - Key field for updating. Must match existing company-level Account Name",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        // Account Details
+        {
+            key: "username",
+            type: "string",
+            label: "Username",
+            description: "Optional - Max 50 characters"
+        },
+        {
+            key: "password",
+            type: "string",
+            label: "Password",
+            description: "Optional - Max 50 characters"
+        },
+        {
+            key: "expiration_date",
+            type: "string",
+            label: "Expiration Date",
+            description: "Optional - Date must be formatted as m/d/yyyy"
+        },
+        {
+            key: "id",
+            type: "string",
+            label: "ID",
+            description: "Key field for updating - Max 250 characters"
+        },
+        {
+            key: "notes",
+            type: "string",
+            label: "Notes",
+            description: "Optional - Max 500 characters"
+        },
+        // Standard X1-X10 Custom Fields
+        {
+            key: "x1",
+            type: "string",
+            label: "X1",
+            description: "Custom field X1"
+        },
+        {
+            key: "x2",
+            type: "string",
+            label: "X2",
+            description: "Custom field X2"
+        },
+        {
+            key: "x3",
+            type: "string",
+            label: "X3",
+            description: "Custom field X3"
+        },
+        {
+            key: "x4",
+            type: "string",
+            label: "X4",
+            description: "Custom field X4"
+        },
+        {
+            key: "x5",
+            type: "string",
+            label: "X5",
+            description: "Custom field X5"
+        },
+        {
+            key: "x6",
+            type: "string",
+            label: "X6",
+            description: "Custom field X6"
+        },
+        {
+            key: "x7",
+            type: "string",
+            label: "X7",
+            description: "Custom field X7"
+        },
+        {
+            key: "x8",
+            type: "string",
+            label: "X8",
+            description: "Custom field X8"
+        },
+        {
+            key: "x9",
+            type: "string",
+            label: "X9",
+            description: "Custom field X9"
+        },
+        {
+            key: "x10",
+            type: "string",
+            label: "X10",
+            description: "Custom field X10"
+        }
+    ],
+    actions: [
+        {
+            operation: "validateProviderProfessionalAccount",
+            mode: "foreground",
+            label: "Validate Provider Professional Account Data",
+            description: "Validate provider professional account data with comprehensive business rules including account name verification and duplicate prevention"
+        }
+    ]
+};
+
+
+/***/ }),
+
 /***/ 39085:
 /***/ ((__unused_webpack_module, exports) => {
 
@@ -174538,6 +177160,513 @@ exports.usersSheet = {
 
 /***/ }),
 
+/***/ 73317:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.workGapSheet = void 0;
+/**
+ * Work Gap Sheet Blueprint
+ *
+ * Manages work history gaps and time off periods for providers with:
+ * - Required external ID and date fields (Start Date, End Date are key fields)
+ * - Gap reason and explanation tracking
+ * - File linking capability with GUID validation
+ * - Provider and file viewability controls
+ * - Character limits and format validations
+ * - 2024.07 additions for Note, User, and TimeStamp
+ */
+exports.workGapSheet = {
+    name: "Work Gap Import Format",
+    slug: "work-gap",
+    access: ["*"],
+    fields: [
+        // Key Fields
+        {
+            key: "providerName",
+            type: "string",
+            label: "Provider Name",
+            description: "Dummy column for provider identification"
+        },
+        {
+            key: "externalId",
+            type: "string",
+            label: "External ID",
+            description: "Key field for updating, Required field",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "externalIdType",
+            type: "string",
+            label: "External ID Type",
+            description: "Key field for updating, Required field",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        // Gap Details
+        {
+            key: "reason",
+            type: "string",
+            label: "Reason",
+            description: "Maximum 200 characters"
+        },
+        {
+            key: "startDate",
+            type: "date",
+            label: "Start Date",
+            description: "Key field for updating. Format: m/d/yyyy",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "endDate",
+            type: "date",
+            label: "End Date",
+            description: "Key field for updating. Format: m/d/yyyy",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "explanation",
+            type: "string",
+            label: "Explanation",
+            description: "Maximum 1,000 characters"
+        },
+        // Visibility Controls
+        {
+            key: "recordViewableByProvider",
+            type: "enum",
+            label: "Record Viewable by Provider",
+            description: "Must be T or F if not empty",
+            config: {
+                options: [
+                    { value: "", label: "" },
+                    { value: "T", label: "T" },
+                    { value: "F", label: "F" }
+                ]
+            }
+        },
+        {
+            key: "fileViewableByProvider",
+            type: "enum",
+            label: "File Viewable by Provider",
+            description: "Must be T or F if not empty",
+            config: {
+                options: [
+                    { value: "", label: "" },
+                    { value: "T", label: "T" },
+                    { value: "F", label: "F" }
+                ]
+            }
+        },
+        // File Management
+        {
+            key: "fileKey",
+            type: "string",
+            label: "File Key",
+            description: "GUID format: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX (8,4,4,4,12 characters)"
+        },
+        // 2024.07 Additions
+        {
+            key: "note",
+            type: "string",
+            label: "Note",
+            description: "Maximum 10,000 characters"
+        },
+        {
+            key: "user",
+            type: "string",
+            label: "User",
+            description: "If empty, 'Credentialing System' will be used - must match Cred Spec emails"
+        },
+        {
+            key: "timeStamp",
+            type: "string",
+            label: "TimeStamp",
+            description: "Format: m/d/yyyy h:mm:ss"
+        },
+        // Standard X1-X10 Custom Fields
+        {
+            key: "x1",
+            type: "string",
+            label: "X1",
+            description: "Custom field X1"
+        },
+        {
+            key: "x2",
+            type: "string",
+            label: "X2",
+            description: "Custom field X2"
+        },
+        {
+            key: "x3",
+            type: "string",
+            label: "X3",
+            description: "Custom field X3"
+        },
+        {
+            key: "x4",
+            type: "string",
+            label: "X4",
+            description: "Custom field X4"
+        },
+        {
+            key: "x5",
+            type: "string",
+            label: "X5",
+            description: "Custom field X5"
+        },
+        {
+            key: "x6",
+            type: "string",
+            label: "X6",
+            description: "Custom field X6"
+        },
+        {
+            key: "x7",
+            type: "string",
+            label: "X7",
+            description: "Custom field X7"
+        },
+        {
+            key: "x8",
+            type: "string",
+            label: "X8",
+            description: "Custom field X8"
+        },
+        {
+            key: "x9",
+            type: "string",
+            label: "X9",
+            description: "Custom field X9"
+        },
+        {
+            key: "x10",
+            type: "string",
+            label: "X10",
+            description: "Custom field X10"
+        }
+    ],
+    actions: [
+        {
+            operation: "validateWorkGap",
+            mode: "foreground",
+            label: "Validate Work Gap",
+            description: "Validate work gap data with comprehensive business rules including date validation, character limits, and File Key business rules"
+        }
+    ]
+};
+
+
+/***/ }),
+
+/***/ 80627:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.workHistorySheet = void 0;
+exports.workHistorySheet = {
+    name: "Work History Import Format",
+    slug: "work-history",
+    access: ["*"],
+    fields: [
+        // Key fields for updating (Required)
+        {
+            key: "external_id",
+            type: "string",
+            label: "External ID",
+            description: "Key field for updating, Required field",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "external_id_type",
+            type: "enum",
+            label: "External ID Type",
+            description: "Key field for updating, Required field",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ],
+            config: {
+                options: [
+                    { value: "NPI", label: "NPI" },
+                    { value: "InternalID", label: "InternalID" },
+                    { value: "ProviderID", label: "ProviderID" },
+                    { value: "EmrID", label: "EmrID" },
+                    { value: "BillingSystemID", label: "BillingSystemID" }
+                ]
+            }
+        },
+        {
+            key: "name_of_facility_employer",
+            type: "string",
+            label: "Name of Facility / Employer",
+            description: "Key field for updating, Required Field - Maximum 150 characters",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "department",
+            type: "string",
+            label: "Department",
+            description: "Key field for updating - Maximum 100 characters"
+        },
+        {
+            key: "role",
+            type: "string",
+            label: "Role",
+            description: "Key field for updating - Maximum 100 characters"
+        },
+        {
+            key: "start_date",
+            type: "date",
+            label: "Start Date",
+            description: "Key field for updating - Must be formatted as m/d/yyyy"
+        },
+        {
+            key: "end_date",
+            type: "date",
+            label: "End Date",
+            description: "Key field for updating - Must be formatted as m/d/yyyy. Current Position checkbox unchecked only if valid End Date imported"
+        },
+        // Additional work history details
+        {
+            key: "reason_for_leaving",
+            type: "string",
+            label: "Reason for Leaving",
+            description: "Maximum 100 characters"
+        },
+        // Address information
+        {
+            key: "address_line_1",
+            type: "string",
+            label: "Address Line 1",
+            description: "Maximum 100 characters"
+        },
+        {
+            key: "address_line_2",
+            type: "string",
+            label: "Address Line 2",
+            description: "Maximum 50 characters"
+        },
+        {
+            key: "city",
+            type: "string",
+            label: "City",
+            description: "Maximum 50 characters"
+        },
+        {
+            key: "county",
+            type: "string",
+            label: "County",
+            description: "Maximum 100 characters"
+        },
+        {
+            key: "state",
+            type: "string",
+            label: "State",
+            description: "Maximum 50 characters, must be valid subdivision value for Country"
+        },
+        {
+            key: "zip",
+            type: "string",
+            label: "Zip",
+            description: "Maximum 10 alphanumeric characters"
+        },
+        {
+            key: "country",
+            type: "string",
+            label: "Country",
+            description: "Must match value in Settings > Configurable Lists > Countries where Display = 'y'"
+        },
+        // Contact information
+        {
+            key: "contact_name",
+            type: "string",
+            label: "Contact Name",
+            description: "Maximum 100 characters"
+        },
+        {
+            key: "contact_title_position",
+            type: "string",
+            label: "Contact's Title/Position",
+            description: "Maximum 100 characters"
+        },
+        {
+            key: "phone_number",
+            type: "string",
+            label: "Phone Number",
+            description: "Must be 9, 10, or 12-digit number without formatting"
+        },
+        {
+            key: "ext",
+            type: "string",
+            label: "Ext.",
+            description: "Extension - must be a number up to 20 digits in length"
+        },
+        {
+            key: "email",
+            type: "string",
+            label: "Email",
+            description: "Must adhere to username@domain.com format"
+        },
+        {
+            key: "fax",
+            type: "string",
+            label: "Fax",
+            description: "Must be 10-digit number without formatting"
+        },
+        // Visibility controls
+        {
+            key: "record_viewable_by_provider",
+            type: "enum",
+            label: "Record Viewable by Provider",
+            description: "Must be T or F if provided",
+            config: {
+                options: [
+                    { value: "T", label: "T" },
+                    { value: "F", label: "F" }
+                ]
+            }
+        },
+        {
+            key: "file_viewable_by_provider",
+            type: "enum",
+            label: "File Viewable by Provider",
+            description: "Must be T or F if provided. Must be F if Record Viewable by Provider is F",
+            config: {
+                options: [
+                    { value: "T", label: "T" },
+                    { value: "F", label: "F" }
+                ]
+            }
+        },
+        // File management
+        {
+            key: "file_key",
+            type: "string",
+            label: "File Key",
+            description: "Must be valid GUID format (XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)"
+        },
+        // 2024.07 additions - tracking fields
+        {
+            key: "note",
+            type: "string",
+            label: "Note",
+            description: "Maximum 10,000 characters"
+        },
+        {
+            key: "user",
+            type: "string",
+            label: "User",
+            description: "Must validate against Cred Spec emails. 'Credentialing System' used if empty"
+        },
+        {
+            key: "timestamp",
+            type: "date",
+            label: "TimeStamp",
+            description: "Must be formatted as m/d/yyyy"
+        },
+        // Standard X1-X10 custom fields (required for all sheets)
+        {
+            key: "x1",
+            type: "string",
+            label: "X1",
+            description: "Custom field X1"
+        },
+        {
+            key: "x2",
+            type: "string",
+            label: "X2",
+            description: "Custom field X2"
+        },
+        {
+            key: "x3",
+            type: "string",
+            label: "X3",
+            description: "Custom field X3"
+        },
+        {
+            key: "x4",
+            type: "string",
+            label: "X4",
+            description: "Custom field X4"
+        },
+        {
+            key: "x5",
+            type: "string",
+            label: "X5",
+            description: "Custom field X5"
+        },
+        {
+            key: "x6",
+            type: "string",
+            label: "X6",
+            description: "Custom field X6"
+        },
+        {
+            key: "x7",
+            type: "string",
+            label: "X7",
+            description: "Custom field X7"
+        },
+        {
+            key: "x8",
+            type: "string",
+            label: "X8",
+            description: "Custom field X8"
+        },
+        {
+            key: "x9",
+            type: "string",
+            label: "X9",
+            description: "Custom field X9"
+        },
+        {
+            key: "x10",
+            type: "string",
+            label: "X10",
+            description: "Custom field X10"
+        }
+    ],
+    actions: [
+        {
+            operation: "validateWorkHistory",
+            mode: "foreground",
+            label: "Validate Work History",
+            description: "Validate work history data with comprehensive business rules including cross-field validations, duplicate detection, and file key management"
+        }
+    ]
+};
+
+
+/***/ }),
+
 /***/ 25045:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
@@ -174571,11 +177700,19 @@ const personal_reference_sheet_1 = __nccwpck_require__(59047);
 const company_privileges_sheet_1 = __nccwpck_require__(9930);
 const provider_privileges_sheet_1 = __nccwpck_require__(34297);
 const professional_training_sheet_1 = __nccwpck_require__(16031);
+const provider_professional_account_sheet_1 = __nccwpck_require__(23356);
+const professional_reference_sheet_1 = __nccwpck_require__(17452);
+const file_details_sheet_1 = __nccwpck_require__(99070);
+const global_privilege_sheet_1 = __nccwpck_require__(30097);
+const health_record_sheet_1 = __nccwpck_require__(66854);
+const other_record_sheet_1 = __nccwpck_require__(12132);
+const work_gap_sheet_1 = __nccwpck_require__(73317);
+const work_history_sheet_1 = __nccwpck_require__(80627);
 exports.companyWorkbook = {
     name: "Company Workbook",
     namespace: "workbook:qgenda-company",
     labels: ["pinned"],
-    sheets: [users_sheet_1.usersSheet, demographic_sheet_1.demographicSheet, demographic_v2_sheet_1.demographicV2Sheet, demographic_reference_sheet_1.demographicReferenceSheet, state_license_sheet_1.stateLicenseSheet, dea_license_sheet_1.deaLicenseSheet, affiliation_sheet_1.affiliationSheet, board_certification_sheet_1.boardCertificationSheet, other_certification_sheet_1.otherCertificationSheet, malpractice_insurance_sheet_1.malpracticeInsuranceSheet, education_gap_sheet_1.educationGapSheet, payer_locations_sheet_1.payerLocationsSheet, payer_sheet_1.payerSheet, cds_certificate_sheet_1.cdsCertificateSheet, cme_sheet_1.cmeSheet, education_sheet_1.educationSheet, provider_appointment_dates_sheet_1.providerAppointmentDatesSheet, provider_location_details_sheet_1.providerLocationDetailsSheet, provider_payer_enrollment_dates_sheet_1.providerPayerEnrollmentDatesSheet, location_sheet_1.locationSheet, drivers_license_sheet_1.driversLicenseSheet, malpractice_claim_sheet_1.malpracticeClaimSheet, personal_reference_sheet_1.personalReferenceSheet, company_privileges_sheet_1.companyPrivilegesSheet, provider_privileges_sheet_1.providerPrivilegesSheet, professional_training_sheet_1.professionalTrainingSheet],
+    sheets: [users_sheet_1.usersSheet, demographic_sheet_1.demographicSheet, demographic_v2_sheet_1.demographicV2Sheet, demographic_reference_sheet_1.demographicReferenceSheet, state_license_sheet_1.stateLicenseSheet, dea_license_sheet_1.deaLicenseSheet, affiliation_sheet_1.affiliationSheet, board_certification_sheet_1.boardCertificationSheet, other_certification_sheet_1.otherCertificationSheet, malpractice_insurance_sheet_1.malpracticeInsuranceSheet, education_gap_sheet_1.educationGapSheet, payer_locations_sheet_1.payerLocationsSheet, payer_sheet_1.payerSheet, cds_certificate_sheet_1.cdsCertificateSheet, cme_sheet_1.cmeSheet, education_sheet_1.educationSheet, provider_appointment_dates_sheet_1.providerAppointmentDatesSheet, provider_location_details_sheet_1.providerLocationDetailsSheet, provider_payer_enrollment_dates_sheet_1.providerPayerEnrollmentDatesSheet, location_sheet_1.locationSheet, drivers_license_sheet_1.driversLicenseSheet, malpractice_claim_sheet_1.malpracticeClaimSheet, personal_reference_sheet_1.personalReferenceSheet, company_privileges_sheet_1.companyPrivilegesSheet, provider_privileges_sheet_1.providerPrivilegesSheet, professional_training_sheet_1.professionalTrainingSheet, provider_professional_account_sheet_1.providerProfessionalAccountSheet, professional_reference_sheet_1.professionalReferenceSheet, file_details_sheet_1.fileDetailsSheet, global_privilege_sheet_1.globalPrivilegeSheet, health_record_sheet_1.healthRecordSheet, other_record_sheet_1.otherRecordSheet, work_gap_sheet_1.workGapSheet, work_history_sheet_1.workHistorySheet],
     actions: [{
             operation: "downloadWorkbook",
             mode: "foreground",
@@ -174652,6 +177789,22 @@ const provider_privileges_validation_listener_1 = __nccwpck_require__(73499);
 const provider_privileges_batch_validation_action_1 = __nccwpck_require__(50901);
 const professional_training_validation_listener_1 = __nccwpck_require__(89897);
 const company_professional_training_batch_validation_action_1 = __nccwpck_require__(93853);
+const provider_professional_account_validation_listener_1 = __nccwpck_require__(3593);
+const validate_provider_professional_account_action_1 = __nccwpck_require__(15379);
+const professional_reference_validation_listener_1 = __nccwpck_require__(42878);
+const validate_professional_reference_action_1 = __nccwpck_require__(52665);
+const file_details_validation_listener_1 = __nccwpck_require__(88677);
+const validate_file_details_action_1 = __nccwpck_require__(84329);
+const global_privilege_validation_listener_1 = __nccwpck_require__(71756);
+const validate_global_privilege_action_1 = __nccwpck_require__(92185);
+const health_record_validation_listener_1 = __nccwpck_require__(24518);
+const validate_health_record_action_1 = __nccwpck_require__(40962);
+const other_record_validation_listener_1 = __nccwpck_require__(85509);
+const validate_other_record_action_1 = __nccwpck_require__(84381);
+const work_gap_validation_listener_1 = __nccwpck_require__(66354);
+const validate_work_gap_action_1 = __nccwpck_require__(39172);
+const work_history_validation_listener_1 = __nccwpck_require__(7044);
+const validate_work_history_action_1 = __nccwpck_require__(68444);
 function default_1(listener) {
     // Generate field mappings dynamically from sheet configurations
     const fieldMappings = (0, field_mappings_1.generateFieldMappings)();
@@ -174713,6 +177866,22 @@ function default_1(listener) {
     (0, provider_privileges_batch_validation_action_1.providerPrivilegesBatchValidationHook)(listener);
     listener.use(professional_training_validation_listener_1.professionalTrainingValidationHook);
     (0, company_professional_training_batch_validation_action_1.companyProfessionalTrainingBatchValidationAction)(listener);
+    listener.use(provider_professional_account_validation_listener_1.providerProfessionalAccountValidationHook);
+    listener.use(validate_provider_professional_account_action_1.validateProviderProfessionalAccountAction);
+    listener.use(professional_reference_validation_listener_1.professionalReferenceValidationHook);
+    listener.use(validate_professional_reference_action_1.validateProfessionalReferenceAction);
+    listener.use(file_details_validation_listener_1.fileDetailsValidationHook);
+    listener.use(validate_file_details_action_1.validateFileDetailsAction);
+    listener.use(global_privilege_validation_listener_1.globalPrivilegeValidationHook);
+    listener.use(validate_global_privilege_action_1.validateGlobalPrivilegeAction);
+    listener.use(health_record_validation_listener_1.healthRecordValidationHook);
+    (0, validate_health_record_action_1.validateHealthRecordAction)(listener);
+    listener.use(other_record_validation_listener_1.otherRecordValidationHook);
+    (0, validate_other_record_action_1.validateOtherRecordAction)(listener);
+    listener.use(work_gap_validation_listener_1.workGapValidationHook);
+    (0, validate_work_gap_action_1.validateWorkGapAction)(listener);
+    listener.use(work_history_validation_listener_1.workHistoryValidationHook);
+    (0, validate_work_history_action_1.validateWorkHistoryAction)(listener);
     listener.use(debug_spaces_listener_1.debugSpacesListener); // Add debug listener
     // Add malpractice insurance deduplication action
     (0, malpractice_deduplication_action_1.malpracticeDeduplicationAction)(listener);
@@ -177094,6 +180263,478 @@ exports.educationValidationHook = educationValidationHook;
 
 /***/ }),
 
+/***/ 88677:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.fileDetailsValidationHook = void 0;
+const plugin_record_hook_1 = __nccwpck_require__(32095);
+const fileDetailsValidationHook = (listener) => {
+    listener.use((0, plugin_record_hook_1.recordHook)("file-details", (record) => {
+        // Get all field values
+        const externalId = record.get("externalId");
+        const externalIdType = record.get("externalIdType");
+        const fileName = record.get("fileName");
+        const fileKey = record.get("fileKey");
+        const fileCategory = record.get("fileCategory");
+        const fileType = record.get("fileType");
+        const fileDescription = record.get("fileDescription");
+        // Required field validations
+        if (!externalId?.trim()) {
+            record.addError("externalId", "External Id required");
+        }
+        if (!externalIdType?.trim()) {
+            record.addError("externalIdType", "External Id Type required");
+        }
+        if (!fileKey?.trim()) {
+            record.addError("fileKey", "File Key required");
+        }
+        // File Key GUID format validation
+        if (fileKey) {
+            const guidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+            if (!guidRegex.test(fileKey)) {
+                record.addError("fileKey", "File Key must be a valid GUID");
+            }
+        }
+        // File Name validations
+        if (fileName) {
+            // Cannot be "None"
+            if (fileName.trim().toLowerCase() === "none") {
+                record.addError("fileName", "File Name cannot be \"None\"");
+            }
+            // Character limit validation (250 characters)
+            if (fileName.length > 250) {
+                record.addError("fileName", "File Name exceeds character limit of 250");
+            }
+        }
+        // File Description character limit validation (10000 characters)
+        if (fileDescription && fileDescription.length > 10000) {
+            record.addError("fileDescription", "File Description exceeds character limit of 10000");
+        }
+        // File Category validation (simulated dropdown values)
+        if (fileCategory) {
+            const validFileCategories = [
+                "Credentials",
+                "Licenses",
+                "Certifications",
+                "Education",
+                "Training",
+                "References",
+                "Insurance",
+                "Legal Documents",
+                "Medical Records",
+                "Administrative",
+                "None" // Special value to clear existing information
+            ];
+            if (!validFileCategories.includes(fileCategory)) {
+                record.addError("fileCategory", "File Category not supported");
+            }
+        }
+        // File Type validation (must have File Category if File Type is provided)
+        if (fileType && !fileCategory) {
+            record.addError("fileType", "File Type not valid for selected File Category");
+        }
+        // File Type validation (simulated dropdown values per category)
+        if (fileType && fileCategory) {
+            const validFileTypes = {
+                "Credentials": ["Medical License", "DEA License", "Board Certification", "Specialty Certificate"],
+                "Licenses": ["State License", "Federal License", "Specialty License", "Temporary License"],
+                "Certifications": ["Board Certification", "Continuing Education", "Training Certificate", "Competency Certificate"],
+                "Education": ["Degree", "Transcript", "Diploma", "Certificate of Completion"],
+                "Training": ["Residency", "Fellowship", "Continuing Education", "Skills Training"],
+                "References": ["Professional Reference", "Personal Reference", "Academic Reference", "Employment Reference"],
+                "Insurance": ["Malpractice Insurance", "Liability Insurance", "Professional Insurance", "General Insurance"],
+                "Legal Documents": ["Contract", "Agreement", "Compliance Document", "Regulatory Filing", "Signable Document"],
+                "Medical Records": ["Patient Records", "Clinical Notes", "Test Results", "Imaging"],
+                "Administrative": ["Forms", "Applications", "Reports", "Correspondence"]
+            };
+            const categoryTypes = validFileTypes[fileCategory];
+            if (categoryTypes && !categoryTypes.includes(fileType) && fileType !== "None") {
+                record.addError("fileType", "File Type not valid for selected File Category");
+            }
+            // Special validation for Signable Document type
+            if (fileType === "Signable Document") {
+                // Note: In a real implementation, this would check the actual file extension
+                // For this validation, we'll add a warning about PDF requirement
+                record.addWarning("fileType", "File must be a .pdf for selected File Type 'Signable Document'");
+            }
+        }
+        // External ID Type validation (simulated valid types)
+        if (externalIdType) {
+            const validExternalIdTypes = [
+                "NPI",
+                "InternalID",
+                "ProviderID",
+                "EmrID",
+                "BillingSystemID",
+                "LicenseNumber",
+                "EmployeeID"
+            ];
+            if (!validExternalIdTypes.includes(externalIdType)) {
+                record.addError("externalIdType", "External ID Type not valid");
+            }
+        }
+        return record;
+    }));
+};
+exports.fileDetailsValidationHook = fileDetailsValidationHook;
+
+
+/***/ }),
+
+/***/ 71756:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.globalPrivilegeValidationHook = void 0;
+const plugin_record_hook_1 = __nccwpck_require__(32095);
+const globalPrivilegeValidationHook = (listener) => {
+    listener.use((0, plugin_record_hook_1.recordHook)("global-privilege", (record) => {
+        // Get all field values
+        const privilegeName = record.get("privilegeName");
+        const icdCptCode = record.get("icdCptCode");
+        const specialty = record.get("specialty");
+        const subspecialty = record.get("subspecialty");
+        const description = record.get("description");
+        // Required field validations
+        if (!privilegeName?.trim()) {
+            record.addError("privilegeName", "Privilege Name required");
+        }
+        if (!icdCptCode?.trim()) {
+            record.addError("icdCptCode", "ICD/CPT Code required");
+        }
+        if (!specialty?.trim()) {
+            record.addError("specialty", "Specialty required");
+        }
+        // Character limit validations
+        if (privilegeName && privilegeName.length > 100) {
+            record.addError("privilegeName", "Privilege Name exceeds character limit of 100");
+        }
+        if (icdCptCode && icdCptCode.length > 50) {
+            record.addError("icdCptCode", "ICD/CPT Code exceeds character limit of 50");
+        }
+        if (specialty && specialty.length > 100) {
+            record.addError("specialty", "Specialty exceeds character limit of 100");
+        }
+        if (subspecialty && subspecialty.length > 100) {
+            record.addError("subspecialty", "Subspecialty exceeds character limit of 100");
+        }
+        if (description && description.length > 10000) {
+            record.addError("description", "Description exceeds character limit of 10000");
+        }
+        // Pipe-delimited value validation for Specialty
+        if (specialty) {
+            const specialtyValues = specialty.split("|").map(s => s.trim()).filter(s => s);
+            // Check if any specialty value is empty after splitting
+            if (specialtyValues.length === 0) {
+                record.addError("specialty", "Specialty required");
+            }
+            // Validate individual specialty values against simulated Specialty List Management
+            const validSpecialties = [
+                "Cardiology",
+                "Pediatrics",
+                "Internal Medicine",
+                "Emergency Medicine",
+                "Family Medicine",
+                "Surgery",
+                "Orthopedic Surgery",
+                "Neurosurgery",
+                "Plastic Surgery",
+                "Radiology",
+                "Pathology",
+                "Anesthesiology",
+                "Psychiatry",
+                "Dermatology",
+                "Ophthalmology",
+                "Otolaryngology",
+                "Urology",
+                "Obstetrics and Gynecology",
+                "Oncology",
+                "Neurology",
+                "Pulmonology",
+                "Gastroenterology",
+                "Endocrinology",
+                "Nephrology",
+                "Rheumatology",
+                "Hematology",
+                "Infectious Disease",
+                "Critical Care",
+                "Palliative Care",
+                "Geriatrics",
+                "Sports Medicine",
+                "Physical Medicine and Rehabilitation",
+                "Occupational Medicine",
+                "Preventive Medicine"
+            ];
+            for (const specialtyValue of specialtyValues) {
+                if (!validSpecialties.includes(specialtyValue)) {
+                    record.addError("specialty", "Specialty not supported");
+                    break; // Only show one error per field
+                }
+            }
+            // Check total character count including pipes
+            if (specialty.length > 100) {
+                record.addError("specialty", "Specialty exceeds character limit of 100");
+            }
+        }
+        // Pipe-delimited value validation for Subspecialty
+        if (subspecialty) {
+            const subspecialtyValues = subspecialty.split("|").map(s => s.trim()).filter(s => s);
+            // Validate individual subspecialty values against simulated Specialty List Management
+            const validSubspecialties = [
+                "Interventional Cardiology",
+                "Electrophysiology",
+                "Heart Failure",
+                "Pediatric Cardiology",
+                "Neonatal-Perinatal Medicine",
+                "Pediatric Emergency Medicine",
+                "Adolescent Medicine",
+                "General Surgery",
+                "Vascular Surgery",
+                "Trauma Surgery",
+                "Cardiothoracic Surgery",
+                "Hand Surgery",
+                "Spine Surgery",
+                "Joint Replacement",
+                "Sports Orthopedics",
+                "Pediatric Orthopedics",
+                "Diagnostic Radiology",
+                "Interventional Radiology",
+                "Nuclear Medicine",
+                "Radiation Oncology",
+                "Cardiac Anesthesia",
+                "Pediatric Anesthesia",
+                "Pain Management",
+                "Child Psychiatry",
+                "Forensic Psychiatry",
+                "Addiction Medicine",
+                "Mohs Surgery",
+                "Pediatric Dermatology",
+                "Dermatopathology",
+                "Retina",
+                "Cornea",
+                "Glaucoma",
+                "Facial Plastic Surgery",
+                "Pediatric Otolaryngology",
+                "Male Infertility",
+                "Pediatric Urology",
+                "Urologic Oncology",
+                "Maternal-Fetal Medicine",
+                "Reproductive Endocrinology",
+                "Gynecologic Oncology",
+                "Medical Oncology",
+                "Surgical Oncology",
+                "Pediatric Oncology",
+                "Stroke Neurology",
+                "Epilepsy",
+                "Movement Disorders",
+                "Interventional Pulmonology",
+                "Sleep Medicine",
+                "Hepatology",
+                "Inflammatory Bowel Disease",
+                "Diabetes",
+                "Thyroid Disorders",
+                "Dialysis",
+                "Transplant Nephrology",
+                "Lupus",
+                "Arthritis",
+                "Leukemia",
+                "Bone Marrow Transplant",
+                "HIV Medicine",
+                "Hospital Medicine",
+                "Hospice Care",
+                "Pain Medicine",
+                "Memory Care",
+                "Concussion",
+                "Knee Injuries",
+                "Spinal Cord Injury",
+                "Brain Injury",
+                "Environmental Medicine",
+                "Travel Medicine",
+                "Toxicology"
+            ];
+            for (const subspecialtyValue of subspecialtyValues) {
+                if (!validSubspecialties.includes(subspecialtyValue)) {
+                    record.addError("subspecialty", "Subspecialty not supported");
+                    break; // Only show one error per field
+                }
+            }
+            // Check total character count including pipes
+            if (subspecialty.length > 100) {
+                record.addError("subspecialty", "Subspecialty exceeds character limit of 100");
+            }
+        }
+        // ICD/CPT Code format validation (basic format check)
+        if (icdCptCode) {
+            // Basic validation for common ICD/CPT formats
+            // ICD-10: A00.0 format (letter + digits + dot + digits)
+            // CPT: 99213 format (5 digits)
+            const icdRegex = /^[A-Z]\d{2}(\.\d{1,2})?$/;
+            const cptRegex = /^\d{5}$/;
+            const icd9Regex = /^\d{3}(\.\d{1,2})?$/; // Legacy ICD-9 format
+            if (!icdRegex.test(icdCptCode) && !cptRegex.test(icdCptCode) && !icd9Regex.test(icdCptCode)) {
+                record.addWarning("icdCptCode", "ICD/CPT Code format may not be valid. Expected formats: ICD-10 (A00.0), CPT (99213), or ICD-9 (123.45)");
+            }
+        }
+        return record;
+    }));
+};
+exports.globalPrivilegeValidationHook = globalPrivilegeValidationHook;
+
+
+/***/ }),
+
+/***/ 24518:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.healthRecordValidationHook = void 0;
+const plugin_record_hook_1 = __nccwpck_require__(32095);
+const healthRecordValidationHook = (listener) => {
+    listener.use((0, plugin_record_hook_1.recordHook)("health-record", (record) => {
+        // Get all field values
+        const externalId = record.get("externalId");
+        const externalIdType = record.get("externalIdType");
+        const recordName = record.get("recordName");
+        const examName = record.get("examName");
+        const completionDate = record.get("completionDate");
+        const renewalDate = record.get("renewalDate");
+        const monitorExpirationDate = record.get("monitorExpirationDate");
+        const notes = record.get("notes");
+        const recordViewableByProvider = record.get("recordViewableByProvider");
+        const fileViewableByProvider = record.get("fileViewableByProvider");
+        const fileKey = record.get("fileKey");
+        const note = record.get("note");
+        const user = record.get("user");
+        const timeStamp = record.get("timeStamp");
+        // Required field validations
+        if (!externalId?.trim()) {
+            record.addError("externalId", "External Id required");
+        }
+        if (!externalIdType?.trim()) {
+            record.addError("externalIdType", "External Id Type required");
+        }
+        if (!recordName?.trim()) {
+            record.addError("recordName", "Record Name required");
+        }
+        // Character limit validations
+        if (recordName && recordName.length > 50) {
+            record.addError("recordName", "Record Name exceeds character limit of 50");
+        }
+        if (notes && notes.length > 500) {
+            record.addError("notes", "Notes exceeds character limit of 500");
+        }
+        if (note && note.length > 10000) {
+            record.addError("note", "Note exceeds character limit of 10000");
+        }
+        // Date format validation (m/d/yyyy)
+        const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+        if (completionDate && !dateRegex.test(completionDate)) {
+            record.addError("completionDate", "Completion Date must be formatted as m/d/yyyy");
+        }
+        if (renewalDate && !dateRegex.test(renewalDate)) {
+            record.addError("renewalDate", "Renewal Date must be formatted as m/d/yyyy");
+        }
+        // Cross-field date validation (Completion Date must be before Renewal Date)
+        if (completionDate && renewalDate && dateRegex.test(completionDate) && dateRegex.test(renewalDate)) {
+            const completionDateObj = new Date(completionDate);
+            const renewalDateObj = new Date(renewalDate);
+            if (completionDateObj >= renewalDateObj) {
+                record.addError("completionDate", "Completion Date must be before Renewal Date");
+            }
+        }
+        // TimeStamp format validation (m/d/yyyy h:mm:ss)
+        if (timeStamp) {
+            const timeStampRegex = /^\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}:\d{2}$/;
+            if (!timeStampRegex.test(timeStamp)) {
+                record.addError("timeStamp", "TimeStamp must be formatted as m/d/yyyy h:mm:ss");
+            }
+        }
+        // Monitor Expiration Date validation (T or F)
+        if (monitorExpirationDate && !["T", "F"].includes(monitorExpirationDate)) {
+            record.addError("monitorExpirationDate", "Monitor Expiration Date must be T or F");
+        }
+        // Record Viewable by Provider validation (T or F)
+        if (recordViewableByProvider && !["T", "F"].includes(recordViewableByProvider)) {
+            record.addError("recordViewableByProvider", "Record Viewable by Provider must be T or F");
+        }
+        // File Viewable by Provider validation (T or F)
+        if (fileViewableByProvider && !["T", "F"].includes(fileViewableByProvider)) {
+            record.addError("fileViewableByProvider", "File Viewable by Provider must be T or F");
+        }
+        // Cross-field validation: File Viewable cannot be T if Record Viewable is F
+        if (recordViewableByProvider === "F" && fileViewableByProvider === "T") {
+            record.addWarning("fileViewableByProvider", "File Viewable by Provider must be set to 'F' on records where Record Viewable by Provider is set to 'F'");
+        }
+        // File Key GUID validation
+        if (fileKey) {
+            const guidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+            if (!guidRegex.test(fileKey)) {
+                record.addError("fileKey", "File Key must be a valid GUID");
+            }
+        }
+        // User validation (warn if empty)
+        if (!user?.trim()) {
+            record.addWarning("user", "No User listed, so \"Credentialing System\" will be listed");
+        }
+        // External ID Type validation (simulated valid types)
+        if (externalIdType) {
+            const validExternalIdTypes = [
+                "NPI",
+                "InternalID",
+                "ProviderID",
+                "EmrID",
+                "BillingSystemID",
+                "LicenseNumber",
+                "EmployeeID"
+            ];
+            if (!validExternalIdTypes.includes(externalIdType)) {
+                record.addError("externalIdType", "External ID Type not valid");
+            }
+        }
+        // Basic date validation (check for invalid dates like 9/31/2022)
+        if (completionDate && dateRegex.test(completionDate)) {
+            const dateObj = new Date(completionDate);
+            const [month, day, year] = completionDate.split('/').map(Number);
+            if (dateObj.getMonth() + 1 !== month || dateObj.getDate() !== day || dateObj.getFullYear() !== year) {
+                record.addError("completionDate", "Completion Date must be formatted as m/d/yyyy");
+            }
+        }
+        if (renewalDate && dateRegex.test(renewalDate)) {
+            const dateObj = new Date(renewalDate);
+            const [month, day, year] = renewalDate.split('/').map(Number);
+            if (dateObj.getMonth() + 1 !== month || dateObj.getDate() !== day || dateObj.getFullYear() !== year) {
+                record.addError("renewalDate", "Renewal Date must be formatted as m/d/yyyy");
+            }
+        }
+        // TimeStamp date validation
+        if (timeStamp && timeStamp.includes('/')) {
+            const dateTimeParts = timeStamp.split(' ');
+            if (dateTimeParts.length >= 1) {
+                const datePart = dateTimeParts[0];
+                if (dateRegex.test(datePart)) {
+                    const dateObj = new Date(datePart);
+                    const [month, day, year] = datePart.split('/').map(Number);
+                    if (dateObj.getMonth() + 1 !== month || dateObj.getDate() !== day || dateObj.getFullYear() !== year) {
+                        record.addError("timeStamp", "TimeStamp must be formatted as m/d/yyyy h:mm:ss");
+                    }
+                }
+            }
+        }
+        return record;
+    }));
+};
+exports.healthRecordValidationHook = healthRecordValidationHook;
+
+
+/***/ }),
+
 /***/ 91780:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
@@ -177966,6 +181607,189 @@ exports.otherCertificationValidationHook = otherCertificationValidationHook;
 
 /***/ }),
 
+/***/ 85509:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.otherRecordValidationHook = void 0;
+const plugin_record_hook_1 = __nccwpck_require__(32095);
+/**
+ * Other Record Validation Hook
+ *
+ * Provides real-time validation for Other Record Import Format including:
+ * - Required field validation (External ID, External ID Type, Type, Name)
+ * - Character limit validation (Name: 100, Note: 10,000)
+ * - Date format validation (m/d/yyyy)
+ * - Cross-field date validation (Issue Date vs Expiration Date)
+ * - Document type validation
+ * - GUID format validation for File Key
+ * - T/F validation for boolean fields
+ * - TimeStamp format validation
+ * - Business rule validations
+ */
+const otherRecordValidationHook = (listener) => {
+    listener.use((0, plugin_record_hook_1.recordHook)("other-record", (record) => {
+        // Get field values
+        const externalId = record.get("externalId");
+        const externalIdType = record.get("externalIdType");
+        const type = record.get("type");
+        const name = record.get("name");
+        const issueDate = record.get("issueDate");
+        const expirationDate = record.get("expirationDate");
+        const monitorExpirationDate = record.get("monitorExpirationDate");
+        const recordViewableByProvider = record.get("recordViewableByProvider");
+        const fileViewableByProvider = record.get("fileViewableByProvider");
+        const fileKey = record.get("fileKey");
+        const note = record.get("note");
+        const user = record.get("user");
+        const timeStamp = record.get("timeStamp");
+        const classification = record.get("classification");
+        // Required field validations
+        if (!externalId?.trim()) {
+            record.addError("externalId", "External Id required");
+        }
+        if (!externalIdType?.trim()) {
+            record.addError("externalIdType", "External Id Type required");
+        }
+        if (!type?.trim()) {
+            record.addError("type", "Type required");
+        }
+        if (!name?.trim()) {
+            record.addError("name", "Name required");
+        }
+        // Character limit validations
+        if (name && name.length > 100) {
+            record.addError("name", "Other Document Name exceeds character limit of 100");
+        }
+        if (note && note.length > 10000) {
+            record.addError("note", "Note exceeds character limit of 10000");
+        }
+        // Document type validation (validate against known categories)
+        if (type && type.trim()) {
+            const validCategories = [
+                "Licenses and Certifications",
+                "Education and Training",
+                "Continuing Medical Education",
+                "Work History and Affiliations",
+                "Employee Documents",
+                "Sanctions and Exclusions",
+                "References",
+                "Payer Documents"
+            ];
+            // This is a simplified check - in reality would validate against actual document types
+            // For now, we'll just ensure it's not obviously invalid
+            const typeWords = type.toLowerCase().split(/\s+/);
+            const hasValidKeywords = validCategories.some(category => category.toLowerCase().split(/\s+/).some(word => typeWords.some(typeWord => typeWord.includes(word.substring(0, 4)))));
+            if (!hasValidKeywords) {
+                record.addError("type", "Document Category not supported");
+            }
+        }
+        // Date format validations
+        const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+        if (issueDate && issueDate.trim()) {
+            if (!dateRegex.test(issueDate)) {
+                record.addError("issueDate", "Issue Date must be formatted as m/d/yyyy");
+            }
+            else {
+                // Validate it's a real date
+                const dateObj = new Date(issueDate);
+                const parts = issueDate.split('/');
+                const month = parseInt(parts[0]);
+                const day = parseInt(parts[1]);
+                const year = parseInt(parts[2]);
+                if (dateObj.getFullYear() !== year ||
+                    dateObj.getMonth() + 1 !== month ||
+                    dateObj.getDate() !== day) {
+                    record.addError("issueDate", "Issue Date must be formatted as m/d/yyyy");
+                }
+            }
+        }
+        if (expirationDate && expirationDate.trim()) {
+            if (!dateRegex.test(expirationDate)) {
+                record.addError("expirationDate", "Expiration Date? must be formatted as m/d/yyyy");
+            }
+            else {
+                // Validate it's a real date
+                const dateObj = new Date(expirationDate);
+                const parts = expirationDate.split('/');
+                const month = parseInt(parts[0]);
+                const day = parseInt(parts[1]);
+                const year = parseInt(parts[2]);
+                if (dateObj.getFullYear() !== year ||
+                    dateObj.getMonth() + 1 !== month ||
+                    dateObj.getDate() !== day) {
+                    record.addError("expirationDate", "Expiration Date? must be formatted as m/d/yyyy");
+                }
+            }
+        }
+        // Cross-field date validation
+        if (issueDate && expirationDate && dateRegex.test(issueDate) && dateRegex.test(expirationDate)) {
+            const issueDateObj = new Date(issueDate);
+            const expirationDateObj = new Date(expirationDate);
+            if (issueDateObj > expirationDateObj) {
+                record.addError("issueDate", "Issue Date cannot be after Expiration Date");
+            }
+        }
+        // TimeStamp format validation (m/d/yyyy h:mm:ss)
+        if (timeStamp && timeStamp.trim()) {
+            const timeStampRegex = /^\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}:\d{2}$/;
+            if (!timeStampRegex.test(timeStamp)) {
+                record.addError("timeStamp", "Timestamp must be formatted as m/d/yyyy h:mm:ss");
+            }
+        }
+        // T/F validations for boolean fields
+        if (monitorExpirationDate && monitorExpirationDate.trim() && !["T", "F"].includes(monitorExpirationDate)) {
+            record.addError("monitorExpirationDate", "Monitor Expiration Date must be T or F");
+        }
+        if (recordViewableByProvider && recordViewableByProvider.trim() && !["T", "F"].includes(recordViewableByProvider)) {
+            record.addError("recordViewableByProvider", "Record Viewable by Provider must be T or F");
+        }
+        if (fileViewableByProvider && fileViewableByProvider.trim() && !["T", "F"].includes(fileViewableByProvider)) {
+            record.addError("fileViewableByProvider", "File Viewable by Provider must be T or F");
+        }
+        // Viewability consistency validation
+        if (recordViewableByProvider === "F" && fileViewableByProvider === "T") {
+            record.addWarning("fileViewableByProvider", "File Viewable by Provider must be set to 'F' on records where Record Viewable by Provider is set to 'F'");
+        }
+        // Both viewability fields must be provided together validation
+        const hasRecordViewable = recordViewableByProvider && recordViewableByProvider.trim();
+        const hasFileViewable = fileViewableByProvider && fileViewableByProvider.trim();
+        if ((hasRecordViewable && !hasFileViewable) || (!hasRecordViewable && hasFileViewable)) {
+            if (!hasRecordViewable) {
+                record.addError("recordViewableByProvider", "If one of Record Viewable by Provider or File Viewable by Provider are imported, the other must also be imported");
+            }
+            if (!hasFileViewable) {
+                record.addError("fileViewableByProvider", "If one of Record Viewable by Provider or File Viewable by Provider are imported, the other must also be imported");
+            }
+        }
+        // GUID format validation for File Key
+        if (fileKey && fileKey.trim()) {
+            const guidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            if (!guidRegex.test(fileKey)) {
+                record.addError("fileKey", "File Key must be a valid GUID");
+            }
+        }
+        // User validation warning
+        if (!user || !user.trim()) {
+            record.addWarning("user", "No User listed, so \"Credentialing System\" will be listed");
+        }
+        // External ID and External ID Type must be provided together
+        const hasExternalId = externalId && externalId.trim();
+        const hasExternalIdType = externalIdType && externalIdType.trim();
+        if ((hasExternalId && !hasExternalIdType) || (!hasExternalId && hasExternalIdType)) {
+            record.addError("externalId", "Must provide both External ID and External ID Type");
+            record.addError("externalIdType", "Must provide both External ID and External ID Type");
+        }
+        return record;
+    }));
+};
+exports.otherRecordValidationHook = otherRecordValidationHook;
+
+
+/***/ }),
+
 /***/ 67390:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
@@ -178577,6 +182401,160 @@ const personalReferenceValidationHook = (listener) => {
     }));
 };
 exports.personalReferenceValidationHook = personalReferenceValidationHook;
+
+
+/***/ }),
+
+/***/ 42878:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.professionalReferenceValidationHook = void 0;
+const plugin_record_hook_1 = __nccwpck_require__(32095);
+const professionalReferenceValidationHook = (listener) => {
+    listener.use((0, plugin_record_hook_1.recordHook)("professional-reference", (record) => {
+        // Get all field values
+        const externalId = record.get("externalId");
+        const externalIdType = record.get("externalIdType");
+        const fullName = record.get("fullName");
+        const relationship = record.get("relationship");
+        const specialty = record.get("specialty");
+        const degreeProviderType = record.get("degreeProviderType");
+        const workedTogetherDuration = record.get("workedTogetherDuration");
+        const facility = record.get("facility");
+        const phoneNumber = record.get("phoneNumber");
+        const ext = record.get("ext");
+        const email = record.get("email");
+        const fax = record.get("fax");
+        const addressLine1 = record.get("addressLine1");
+        const addressLine2 = record.get("addressLine2");
+        const city = record.get("city");
+        const county = record.get("county");
+        const state = record.get("state");
+        const zip = record.get("zip");
+        const country = record.get("country");
+        const recordViewableByProvider = record.get("recordViewableByProvider");
+        const fileViewableByProvider = record.get("fileViewableByProvider");
+        const fileKey = record.get("fileKey");
+        const fromDate = record.get("from");
+        const toDate = record.get("to");
+        const active = record.get("active");
+        // Required field validations
+        if (!externalId?.trim()) {
+            record.addError("externalId", "External Id required");
+        }
+        if (!externalIdType?.trim()) {
+            record.addError("externalIdType", "External Id Type required");
+        }
+        if (!fullName?.trim()) {
+            record.addError("fullName", "Full Name required");
+        }
+        // Character limit validations
+        if (fullName && fullName.length > 100) {
+            record.addError("fullName", "Full Name exceeds character limit of 100");
+        }
+        if (relationship && relationship.length > 100) {
+            record.addError("relationship", "Relationship exceeds character limit of 100");
+        }
+        if (workedTogetherDuration && workedTogetherDuration.length > 50) {
+            record.addError("workedTogetherDuration", "Worked together for how long? exceeds character limit of 50");
+        }
+        if (facility && facility.length > 100) {
+            record.addError("facility", "Facility exceeds character limit of 100");
+        }
+        if (addressLine1 && addressLine1.length > 100) {
+            record.addError("addressLine1", "Address Line 1 exceeds character limit of 100");
+        }
+        if (addressLine2 && addressLine2.length > 50) {
+            record.addError("addressLine2", "Address Line 2 exceeds character limit of 50");
+        }
+        if (city && city.length > 50) {
+            record.addError("city", "City exceeds character limit of 50");
+        }
+        if (county && county.length > 100) {
+            record.addError("county", "County exceeds character limit of 100");
+        }
+        if (state && state.length > 50) {
+            record.addWarning("state", `${state} is not a valid subdivision for Country.`);
+        }
+        if (country && country.length > 100) {
+            record.addError("country", "Country exceeds character limit of 100");
+        }
+        // Phone and Fax number validations (9, 10, or 12 digits only)
+        if (phoneNumber) {
+            const phoneRegex = /^\d{9}$|^\d{10}$|^\d{12}$/;
+            if (!phoneRegex.test(phoneNumber)) {
+                record.addError("phoneNumber", "Phone Number must be 9, 10, or 12-digit number");
+            }
+        }
+        if (fax) {
+            const faxRegex = /^\d{9}$|^\d{10}$|^\d{12}$/;
+            if (!faxRegex.test(fax)) {
+                record.addError("fax", "Fax must be 9, 10, or 12-digit number");
+            }
+        }
+        // Extension validation (up to 20 digits)
+        if (ext) {
+            const extRegex = /^\d{1,20}$/;
+            if (!extRegex.test(ext)) {
+                record.addError("ext", "'Ext.' must be a number up to 20 digits in length");
+            }
+        }
+        // Email validation
+        if (email) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                record.addError("email", "'Email' is not a valid email address.");
+            }
+        }
+        // Zip code validation (≤ 10 alphanumeric characters)
+        if (zip && zip.length > 10) {
+            record.addError("zip", "Zip exceeds 10 characters.");
+        }
+        // Record and File Viewable by Provider validations
+        if (recordViewableByProvider && !["T", "F"].includes(recordViewableByProvider)) {
+            record.addError("recordViewableByProvider", "Viewable by Provider must be T or F");
+        }
+        if (fileViewableByProvider && !["T", "F"].includes(fileViewableByProvider)) {
+            record.addError("fileViewableByProvider", "Viewable by Provider must be T or F");
+        }
+        // Cross-field validation: File Viewable cannot be T if Record Viewable is F
+        if (recordViewableByProvider === "F" && fileViewableByProvider === "T") {
+            record.addWarning("fileViewableByProvider", "File Viewable by Provider must be set to 'F' on records where Record Viewable by Provider is set to 'F'");
+        }
+        // File Key GUID validation
+        if (fileKey) {
+            const guidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+            if (!guidRegex.test(fileKey)) {
+                record.addError("fileKey", "File Key must be a valid GUID");
+            }
+        }
+        // Date format validation (m/d/yyyy)
+        const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+        if (fromDate && !dateRegex.test(fromDate)) {
+            record.addError("from", "From must be formatted as m/d/yyyy");
+        }
+        if (toDate && !dateRegex.test(toDate)) {
+            record.addError("to", "To must be formatted as m/d/yyyy");
+        }
+        // Date range validation (From ≤ To)
+        if (fromDate && toDate && dateRegex.test(fromDate) && dateRegex.test(toDate)) {
+            const fromDateObj = new Date(fromDate);
+            const toDateObj = new Date(toDate);
+            if (fromDateObj > toDateObj) {
+                record.addError("from", "From must be less than or equal to To.");
+            }
+        }
+        // Active field validation
+        if (active && !["T", "F"].includes(active)) {
+            record.addError("active", "Active must be T or F");
+        }
+        return record;
+    }));
+};
+exports.professionalReferenceValidationHook = professionalReferenceValidationHook;
 
 
 /***/ }),
@@ -179835,6 +183813,137 @@ exports.providerPrivilegesValidationHook = providerPrivilegesValidationHook;
 
 /***/ }),
 
+/***/ 3593:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.providerProfessionalAccountValidationHook = void 0;
+const plugin_record_hook_1 = __nccwpck_require__(32095);
+const providerProfessionalAccountValidationHook = (listener) => {
+    listener.use((0, plugin_record_hook_1.recordHook)("provider_professional_account", (record) => {
+        // Get all field values
+        const providerName = record.get("provider_name");
+        const externalId = record.get("external_id");
+        const externalIdType = record.get("external_id_type");
+        const accountName = record.get("account_name");
+        const username = record.get("username");
+        const password = record.get("password");
+        const expirationDate = record.get("expiration_date");
+        const id = record.get("id");
+        const notes = record.get("notes");
+        // Required field validations
+        if (!externalId?.trim()) {
+            record.addError("external_id", "External Id required");
+        }
+        if (!externalIdType?.trim()) {
+            record.addError("external_id_type", "External Id Type required");
+        }
+        if (!accountName?.trim()) {
+            record.addError("account_name", "Account Name required");
+        }
+        // External ID Type enum validation
+        if (externalIdType && externalIdType.trim()) {
+            const validIdTypes = ["NPI", "InternalID", "ProviderID", "EmrID", "BillingSystemID"];
+            if (!validIdTypes.includes(externalIdType.trim())) {
+                record.addError("external_id_type", "External ID Type not valid");
+            }
+        }
+        // Character limit validations
+        if (username && username.length > 50) {
+            record.addError("username", "Username exceeds character limit of 50");
+        }
+        if (password && password.length > 50) {
+            record.addError("password", "Password exceeds character limit of 50");
+        }
+        if (id && id.length > 250) {
+            record.addError("id", "ID exceeds character limit of 250");
+        }
+        if (notes && notes.length > 500) {
+            record.addError("notes", "Notes exceeds character limit of 500");
+        }
+        // Date format validation for Expiration Date (m/d/yyyy)
+        if (expirationDate && expirationDate.trim()) {
+            const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+            if (!dateRegex.test(expirationDate.trim())) {
+                record.addError("expiration_date", "Expiration Date must be formatted as m/d/yyyy");
+            }
+            else {
+                // Validate actual date values
+                const [month, day, year] = expirationDate.trim().split('/').map(Number);
+                const dateObj = new Date(year, month - 1, day);
+                if (dateObj.getFullYear() !== year ||
+                    dateObj.getMonth() !== month - 1 ||
+                    dateObj.getDate() !== day) {
+                    record.addError("expiration_date", "Expiration Date must be formatted as m/d/yyyy");
+                }
+            }
+        }
+        // External ID format validation based on type
+        if (externalId && externalIdType && externalId.trim() && externalIdType.trim()) {
+            const idValue = externalId.trim();
+            const idType = externalIdType.trim();
+            switch (idType) {
+                case "NPI":
+                    // NPI should be 10 digits
+                    if (!/^\d{10}$/.test(idValue)) {
+                        record.addError("external_id", "NPI must be exactly 10 digits");
+                    }
+                    break;
+                case "InternalID":
+                case "ProviderID":
+                case "EmrID":
+                case "BillingSystemID":
+                    // Basic alphanumeric validation for other ID types
+                    if (!/^[A-Za-z0-9\-\_\.]+$/.test(idValue)) {
+                        record.addError("external_id", `${idType} contains invalid characters. Use only letters, numbers, hyphens, underscores, and periods`);
+                    }
+                    break;
+            }
+        }
+        // Cross-field validations
+        const hasExternalId = externalId && externalId.trim();
+        const hasExternalIdType = externalIdType && externalIdType.trim();
+        if ((hasExternalId && !hasExternalIdType) || (!hasExternalId && hasExternalIdType)) {
+            record.addError("external_id", "Must provide both External ID and External ID Type");
+            record.addError("external_id_type", "Must provide both External ID and External ID Type");
+        }
+        // Account Name validation (basic format check)
+        if (accountName && accountName.trim()) {
+            // Check for suspicious patterns that might indicate invalid account names
+            const suspiciousPatterns = ["test", "example", "dummy", "xxx", "tbd"];
+            const accountLower = accountName.toLowerCase();
+            if (suspiciousPatterns.some(pattern => accountLower.includes(pattern))) {
+                record.addWarning("account_name", "Account Name appears to be placeholder data - verify it matches existing company accounts");
+            }
+        }
+        // Password security warnings (optional but helpful)
+        if (password && password.trim()) {
+            if (password.length < 8) {
+                record.addWarning("password", "Password is less than 8 characters - consider stronger passwords for security");
+            }
+            // Check for common weak passwords
+            const weakPasswords = ["password", "123456", "admin", "user"];
+            if (weakPasswords.includes(password.toLowerCase())) {
+                record.addWarning("password", "Password appears to be commonly used - consider more secure password");
+            }
+        }
+        // TODO: Production validations that would be implemented:
+        // - Validate Account Name against existing company-level Account Names
+        // - Check if Account Name is archived in provider's company
+        // - Cross-reference External ID/Type with existing providers in company
+        // - Validate username availability/uniqueness within account context
+        // - Check password policy compliance (complexity requirements)
+        // - Validate expiration date is in the future (if provided)
+        return record;
+    }));
+};
+exports.providerProfessionalAccountValidationHook = providerProfessionalAccountValidationHook;
+
+
+/***/ }),
+
 /***/ 11680:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
@@ -179935,6 +184044,381 @@ exports.usersHook = (0, plugin_record_hook_1.bulkRecordHook)('users', async (rec
 
 /***/ }),
 
+/***/ 66354:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.workGapValidationHook = void 0;
+const plugin_record_hook_1 = __nccwpck_require__(32095);
+/**
+ * Work Gap Validation Hook
+ *
+ * Provides real-time validation for Work Gap Import Format including:
+ * - Required field validation (External ID, External ID Type, Start Date, End Date)
+ * - Character limit validation (Reason: 200, Explanation: 1,000, Note: 10,000)
+ * - Date format validation (m/d/yyyy)
+ * - Cross-field date validation (Start Date vs End Date)
+ * - GUID format validation for File Key
+ * - T/F validation for boolean fields
+ * - TimeStamp format validation
+ * - Business rule validations
+ */
+const workGapValidationHook = (listener) => {
+    listener.use((0, plugin_record_hook_1.recordHook)("work-gap", (record) => {
+        // Get field values
+        const externalId = record.get("externalId");
+        const externalIdType = record.get("externalIdType");
+        const reason = record.get("reason");
+        const startDate = record.get("startDate");
+        const endDate = record.get("endDate");
+        const explanation = record.get("explanation");
+        const recordViewableByProvider = record.get("recordViewableByProvider");
+        const fileViewableByProvider = record.get("fileViewableByProvider");
+        const fileKey = record.get("fileKey");
+        const note = record.get("note");
+        const user = record.get("user");
+        const timeStamp = record.get("timeStamp");
+        // Required field validations
+        if (!externalId?.trim()) {
+            record.addError("externalId", "External Id required");
+        }
+        if (!externalIdType?.trim()) {
+            record.addError("externalIdType", "External Id Type required");
+        }
+        if (!startDate?.trim()) {
+            record.addError("startDate", "Start Date is required");
+        }
+        if (!endDate?.trim()) {
+            record.addError("endDate", "End Date is required");
+        }
+        // Character limit validations
+        if (reason && reason.length > 200) {
+            record.addError("reason", "Reason exceeds character limit of 200");
+        }
+        if (explanation && explanation.length > 1000) {
+            record.addError("explanation", "Explanation exceeds character limit of 1000");
+        }
+        if (note && note.length > 10000) {
+            record.addError("note", "Note exceeds character limit of 10000");
+        }
+        // Date format validations
+        const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+        if (startDate && startDate.trim()) {
+            if (!dateRegex.test(startDate)) {
+                record.addError("startDate", "Start Date must be formatted as m/d/yyyy");
+            }
+            else {
+                // Validate it's a real date
+                const dateObj = new Date(startDate);
+                const parts = startDate.split('/');
+                const month = parseInt(parts[0]);
+                const day = parseInt(parts[1]);
+                const year = parseInt(parts[2]);
+                if (dateObj.getFullYear() !== year ||
+                    dateObj.getMonth() + 1 !== month ||
+                    dateObj.getDate() !== day) {
+                    record.addError("startDate", "Start Date must be formatted as m/d/yyyy");
+                }
+            }
+        }
+        if (endDate && endDate.trim()) {
+            if (!dateRegex.test(endDate)) {
+                record.addError("endDate", "End Date must be formatted as m/d/yyyy");
+            }
+            else {
+                // Validate it's a real date
+                const dateObj = new Date(endDate);
+                const parts = endDate.split('/');
+                const month = parseInt(parts[0]);
+                const day = parseInt(parts[1]);
+                const year = parseInt(parts[2]);
+                if (dateObj.getFullYear() !== year ||
+                    dateObj.getMonth() + 1 !== month ||
+                    dateObj.getDate() !== day) {
+                    record.addError("endDate", "End Date must be formatted as m/d/yyyy");
+                }
+            }
+        }
+        // Cross-field date validation
+        if (startDate && endDate && dateRegex.test(startDate) && dateRegex.test(endDate)) {
+            const startDateObj = new Date(startDate);
+            const endDateObj = new Date(endDate);
+            if (startDateObj >= endDateObj) {
+                record.addError("endDate", "End Date must be after Start Date");
+            }
+        }
+        // TimeStamp format validation (m/d/yyyy h:mm:ss)
+        if (timeStamp && timeStamp.trim()) {
+            const timeStampRegex = /^\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}:\d{2}$/;
+            if (!timeStampRegex.test(timeStamp)) {
+                record.addError("timeStamp", "Timestamp must be formatted as m/d/yyyy h:mm:ss");
+            }
+        }
+        // T/F validations for boolean fields
+        if (recordViewableByProvider && recordViewableByProvider.trim() && !["T", "F"].includes(recordViewableByProvider)) {
+            record.addError("recordViewableByProvider", "Record Viewable by Provider must be T or F");
+        }
+        if (fileViewableByProvider && fileViewableByProvider.trim() && !["T", "F"].includes(fileViewableByProvider)) {
+            record.addError("fileViewableByProvider", "File Viewable by Provider must be T or F");
+        }
+        // Viewability consistency validation
+        if (recordViewableByProvider === "F" && fileViewableByProvider === "T") {
+            record.addWarning("fileViewableByProvider", "File Viewable by Provider must be set to 'F' on records where Record Viewable by Provider is set to 'F'");
+        }
+        // Both viewability fields must be provided together validation
+        const hasRecordViewable = recordViewableByProvider && recordViewableByProvider.trim();
+        const hasFileViewable = fileViewableByProvider && fileViewableByProvider.trim();
+        if ((hasRecordViewable && !hasFileViewable) || (!hasRecordViewable && hasFileViewable)) {
+            if (!hasRecordViewable) {
+                record.addError("recordViewableByProvider", "If one of Record Viewable by Provider or File Viewable by Provider are imported, the other must also be imported");
+            }
+            if (!hasFileViewable) {
+                record.addError("fileViewableByProvider", "If one of Record Viewable by Provider or File Viewable by Provider are imported, the other must also be imported");
+            }
+        }
+        // GUID format validation for File Key
+        if (fileKey && fileKey.trim()) {
+            const guidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            if (!guidRegex.test(fileKey)) {
+                record.addError("fileKey", "File Key must be a valid GUID");
+            }
+        }
+        // User validation warning
+        if (!user || !user.trim()) {
+            record.addWarning("user", "No User listed, so \"Credentialing System\" will be listed");
+        }
+        // External ID and External ID Type must be provided together
+        const hasExternalId = externalId && externalId.trim();
+        const hasExternalIdType = externalIdType && externalIdType.trim();
+        if ((hasExternalId && !hasExternalIdType) || (!hasExternalId && hasExternalIdType)) {
+            if (!hasExternalId) {
+                record.addError("externalId", "Must provide both External ID and External ID Type");
+            }
+            if (!hasExternalIdType) {
+                record.addError("externalIdType", "Must provide both External ID and External ID Type");
+            }
+        }
+        // Business logic validations for work gaps
+        if (startDate && endDate && dateRegex.test(startDate) && dateRegex.test(endDate)) {
+            const startDateObj = new Date(startDate);
+            const endDateObj = new Date(endDate);
+            const gapDuration = Math.floor((endDateObj.getTime() - startDateObj.getTime()) / (1000 * 3600 * 24));
+            // Check for extremely short gaps (less than 1 week)
+            if (gapDuration < 7) {
+                record.addWarning("endDate", "Work gap duration is less than 1 week - verify this is correct");
+            }
+            // Check for extremely long gaps (more than 5 years)
+            if (gapDuration > 1825) { // 5 years
+                record.addWarning("endDate", "Work gap duration is more than 5 years - verify this is correct");
+            }
+            // Check for future dates
+            const currentDate = new Date();
+            if (startDateObj > currentDate) {
+                record.addWarning("startDate", "Start date is in the future - verify this is correct");
+            }
+            if (endDateObj > currentDate) {
+                record.addWarning("endDate", "End date is in the future - verify this is correct");
+            }
+        }
+        // Reason validation for common gap types
+        if (reason && reason.trim()) {
+            const commonReasons = [
+                "maternity", "paternity", "medical", "sabbatical", "education",
+                "family", "personal", "military", "research", "fellowship",
+                "unemployment", "between positions", "career break"
+            ];
+            const reasonLower = reason.toLowerCase();
+            const hasCommonReason = commonReasons.some(commonReason => reasonLower.includes(commonReason));
+            if (!hasCommonReason && reason.length > 50) {
+                record.addInfo("reason", "Consider using standard work gap reasons for consistency");
+            }
+        }
+        return record;
+    }));
+};
+exports.workGapValidationHook = workGapValidationHook;
+
+
+/***/ }),
+
+/***/ 7044:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.workHistoryValidationHook = void 0;
+const plugin_record_hook_1 = __nccwpck_require__(32095);
+const workHistoryValidationHook = (listener) => {
+    listener.use((0, plugin_record_hook_1.recordHook)("work-history", (record) => {
+        // Get all field values
+        const externalId = record.get("external_id");
+        const externalIdType = record.get("external_id_type");
+        const nameOfFacilityEmployer = record.get("name_of_facility_employer");
+        const department = record.get("department");
+        const role = record.get("role");
+        const startDate = record.get("start_date");
+        const endDate = record.get("end_date");
+        const reasonForLeaving = record.get("reason_for_leaving");
+        const addressLine1 = record.get("address_line_1");
+        const addressLine2 = record.get("address_line_2");
+        const city = record.get("city");
+        const county = record.get("county");
+        const state = record.get("state");
+        const zip = record.get("zip");
+        const country = record.get("country");
+        const contactName = record.get("contact_name");
+        const contactTitlePosition = record.get("contact_title_position");
+        const phoneNumber = record.get("phone_number");
+        const ext = record.get("ext");
+        const email = record.get("email");
+        const fax = record.get("fax");
+        const recordViewableByProvider = record.get("record_viewable_by_provider");
+        const fileViewableByProvider = record.get("file_viewable_by_provider");
+        const fileKey = record.get("file_key");
+        const note = record.get("note");
+        const user = record.get("user");
+        const timestamp = record.get("timestamp");
+        // Required field validations
+        if (!externalId?.trim()) {
+            record.addError("external_id", "External Id required");
+        }
+        if (!externalIdType?.trim()) {
+            record.addError("external_id_type", "External Id Type required");
+        }
+        if (!nameOfFacilityEmployer?.trim()) {
+            record.addError("name_of_facility_employer", "Name of Practice/Employer required");
+        }
+        // External ID Type validation
+        const validExternalIdTypes = ["NPI", "InternalID", "ProviderID", "EmrID", "BillingSystemID"];
+        if (externalIdType && !validExternalIdTypes.includes(externalIdType)) {
+            record.addError("external_id_type", "External ID Type not valid");
+        }
+        // Character limit validations
+        if (nameOfFacilityEmployer && nameOfFacilityEmployer.length > 150) {
+            record.addError("name_of_facility_employer", "Work History Name exceeds character limit of 150");
+        }
+        if (department && department.length > 100) {
+            record.addError("department", "Department exceeds character limit of 100");
+        }
+        if (role && role.length > 100) {
+            record.addError("role", "Role exceeds character limit of 100");
+        }
+        if (reasonForLeaving && reasonForLeaving.length > 100) {
+            record.addError("reason_for_leaving", "Reason for Leaving exceeds character limit of 100");
+        }
+        if (addressLine1 && addressLine1.length > 100) {
+            record.addError("address_line_1", "Address Line 1 exceeds character limit of 100");
+        }
+        if (addressLine2 && addressLine2.length > 50) {
+            record.addError("address_line_2", "Address Line 2 exceeds character limit of 50");
+        }
+        if (city && city.length > 50) {
+            record.addError("city", "City exceeds character limit of 50");
+        }
+        if (county && county.length > 100) {
+            record.addError("county", "County exceeds character limit of 100");
+        }
+        if (state && state.length > 50) {
+            record.addError("state", "State exceeds character limit of 50");
+        }
+        if (contactName && contactName.length > 100) {
+            record.addError("contact_name", "Contact Name exceeds character limit of 100");
+        }
+        if (contactTitlePosition && contactTitlePosition.length > 100) {
+            record.addError("contact_title_position", "Contact's Title/Position exceeds character limit of 100");
+        }
+        if (ext && ext.length > 20) {
+            record.addError("ext", "Ext.' must be a number up to 20 digits in length");
+        }
+        if (note && note.length > 10000) {
+            record.addError("note", "Note exceeds character limit of 10000");
+        }
+        // Date format validations (m/d/yyyy)
+        const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+        if (startDate && !dateRegex.test(startDate)) {
+            record.addError("start_date", "Start Date must be formatted as m/d/yyyy");
+        }
+        if (endDate && !dateRegex.test(endDate)) {
+            record.addError("end_date", "End Date must be formatted as m/d/yyyy");
+        }
+        if (timestamp && !dateRegex.test(timestamp)) {
+            record.addError("timestamp", "Timestamp must be formatted as m/d/yyyy");
+        }
+        // State validation (non-ascii characters check)
+        if (state && /[^\x00-\x7F]/.test(state)) {
+            record.addError("state", "State not supported");
+        }
+        // Zip validation (alphanumeric, max 10 characters)
+        if (zip && (zip.length > 10 || !/^[a-zA-Z0-9]*$/.test(zip))) {
+            record.addError("zip", "Zip exceeds 10 characters.");
+        }
+        // Phone number validation (9, 10, or 12 digits only)
+        if (phoneNumber) {
+            const phoneDigitsOnly = phoneNumber.replace(/\D/g, '');
+            if (phoneDigitsOnly.length !== 9 && phoneDigitsOnly.length !== 10 && phoneDigitsOnly.length !== 12) {
+                record.addError("phone_number", "Phone Number must be 9, 10, or 12-digit number");
+            }
+            // Check if original contains formatting
+            if (phoneNumber !== phoneDigitsOnly) {
+                record.addError("phone_number", "Phone Number must be 9, 10, or 12-digit number");
+            }
+        }
+        // Extension validation (must be numeric)
+        if (ext && !/^\d+$/.test(ext)) {
+            record.addError("ext", "Ext.' must be a number up to 20 digits in length");
+        }
+        // Email validation
+        if (email) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                record.addError("email", "Email not a valid email");
+            }
+        }
+        // Fax validation (must be 10 digits without formatting)
+        if (fax) {
+            const faxDigitsOnly = fax.replace(/\D/g, '');
+            if (faxDigitsOnly.length !== 10) {
+                record.addError("fax", "Fax must be 10-digit number");
+            }
+            // Check if original contains formatting
+            if (fax !== faxDigitsOnly) {
+                record.addError("fax", "Fax must be 10-digit number");
+            }
+        }
+        // Viewability field validations
+        const validViewabilityValues = ["T", "F"];
+        if (recordViewableByProvider && !validViewabilityValues.includes(recordViewableByProvider)) {
+            record.addError("record_viewable_by_provider", "Record Viewable by Provider must be T or F");
+        }
+        if (fileViewableByProvider && !validViewabilityValues.includes(fileViewableByProvider)) {
+            record.addError("file_viewable_by_provider", "File Viewable by Provider must be T or F");
+        }
+        // Cross-field validation: File Viewable by Provider logic
+        if (recordViewableByProvider === "F" && fileViewableByProvider === "T") {
+            record.addWarning("file_viewable_by_provider", "File Viewable by Provider must be set to 'F' on records where Record Viewable by Provider is set to 'F'");
+        }
+        // File Key GUID validation
+        if (fileKey) {
+            const guidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+            if (!guidRegex.test(fileKey)) {
+                record.addError("file_key", "File Key must be a valid GUID");
+            }
+        }
+        // User field warning
+        if (!user?.trim()) {
+            record.addWarning("user", "No User listed, so \"Credentialing System\" will be listed");
+        }
+        return record;
+    }));
+};
+exports.workHistoryValidationHook = workHistoryValidationHook;
+
+
+/***/ }),
+
 /***/ 25100:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
@@ -180028,6 +184512,14 @@ const personal_reference_sheet_1 = __nccwpck_require__(59047);
 const company_privileges_sheet_1 = __nccwpck_require__(9930);
 const provider_privileges_sheet_1 = __nccwpck_require__(34297);
 const professional_training_sheet_1 = __nccwpck_require__(16031);
+const provider_professional_account_sheet_1 = __nccwpck_require__(23356);
+const professional_reference_sheet_1 = __nccwpck_require__(17452);
+const file_details_sheet_1 = __nccwpck_require__(99070);
+const global_privilege_sheet_1 = __nccwpck_require__(30097);
+const health_record_sheet_1 = __nccwpck_require__(66854);
+const other_record_sheet_1 = __nccwpck_require__(12132);
+const work_gap_sheet_1 = __nccwpck_require__(73317);
+const work_history_sheet_1 = __nccwpck_require__(80627);
 // Generate field mappings from all sheet configurations
 function generateFieldMappings() {
     const sheets = [
@@ -180055,7 +184547,15 @@ function generateFieldMappings() {
         personal_reference_sheet_1.personalReferenceSheet,
         company_privileges_sheet_1.companyPrivilegesSheet,
         provider_privileges_sheet_1.providerPrivilegesSheet,
-        professional_training_sheet_1.professionalTrainingSheet
+        professional_training_sheet_1.professionalTrainingSheet,
+        provider_professional_account_sheet_1.providerProfessionalAccountSheet,
+        professional_reference_sheet_1.professionalReferenceSheet,
+        file_details_sheet_1.fileDetailsSheet,
+        global_privilege_sheet_1.globalPrivilegeSheet,
+        health_record_sheet_1.healthRecordSheet,
+        other_record_sheet_1.otherRecordSheet,
+        work_gap_sheet_1.workGapSheet,
+        work_history_sheet_1.workHistorySheet
     ];
     const mappings = {};
     sheets.forEach(sheet => {

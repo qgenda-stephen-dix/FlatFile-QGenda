@@ -23,6 +23,14 @@ import { personalReferenceSheet } from "../blueprints/sheets/personal-reference.
 import { companyPrivilegesSheet } from "../blueprints/sheets/company-privileges.sheet";
 import { providerPrivilegesSheet } from "../blueprints/sheets/provider-privileges.sheet";
 import { professionalTrainingSheet } from "../blueprints/sheets/professional-training.sheet";
+import { providerProfessionalAccountSheet } from "../blueprints/sheets/provider-professional-account.sheet";
+import { professionalReferenceSheet } from "../blueprints/sheets/professional-reference.sheet";
+import { fileDetailsSheet } from "../blueprints/sheets/file-details.sheet";
+import { globalPrivilegeSheet } from "../blueprints/sheets/global-privilege.sheet";
+import { healthRecordSheet } from "../blueprints/sheets/health-record.sheet";
+import { otherRecordSheet } from "../blueprints/sheets/other-record.sheet";
+import { workGapSheet } from "../blueprints/sheets/work-gap.sheet";
+import { workHistorySheet } from "../blueprints/sheets/work-history.sheet";
 
 // Generate field mappings from all sheet configurations
 export function generateFieldMappings(): { [key: string]: string } {
@@ -51,7 +59,15 @@ export function generateFieldMappings(): { [key: string]: string } {
     personalReferenceSheet,
     companyPrivilegesSheet,
     providerPrivilegesSheet,
-    professionalTrainingSheet
+    professionalTrainingSheet,
+    providerProfessionalAccountSheet,
+    professionalReferenceSheet,
+    fileDetailsSheet,
+    globalPrivilegeSheet,
+    healthRecordSheet,
+    otherRecordSheet,
+    workGapSheet,
+    workHistorySheet
   ];
 
   const mappings: { [key: string]: string } = {};

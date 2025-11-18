@@ -56,6 +56,22 @@ import { providerPrivilegesValidationHook } from "./listeners/provider-privilege
 import { providerPrivilegesBatchValidationHook } from "./listeners/provider-privileges-batch-validation.action";
 import { professionalTrainingValidationHook } from "./listeners/professional-training-validation.listener";
 import { companyProfessionalTrainingBatchValidationAction } from "./listeners/company-professional-training-batch-validation.action";
+import { providerProfessionalAccountValidationHook } from "./listeners/provider-professional-account-validation.listener";
+import { validateProviderProfessionalAccountAction } from "./blueprints/actions/validate-provider-professional-account.action";
+import { professionalReferenceValidationHook } from "./listeners/professional-reference-validation.listener";
+import { validateProfessionalReferenceAction } from "./blueprints/actions/validate-professional-reference.action";
+import { fileDetailsValidationHook } from "./listeners/file-details-validation.listener";
+import { validateFileDetailsAction } from "./blueprints/actions/validate-file-details.action";
+import { globalPrivilegeValidationHook } from "./listeners/global-privilege-validation.listener";
+import { validateGlobalPrivilegeAction } from "./blueprints/actions/validate-global-privilege.action";
+import { healthRecordValidationHook } from "./listeners/health-record-validation.listener";
+import { validateHealthRecordAction } from "./blueprints/actions/validate-health-record.action";
+import { otherRecordValidationHook } from "./listeners/other-record-validation.listener";
+import { validateOtherRecordAction } from "./blueprints/actions/validate-other-record.action";
+import { workGapValidationHook } from "./listeners/work-gap-validation.listener";
+import { validateWorkGapAction } from "./blueprints/actions/validate-work-gap.action";
+import { workHistoryValidationHook } from "./listeners/work-history-validation.listener";
+import { validateWorkHistoryAction } from "./blueprints/actions/validate-work-history.action";
 
 export default function (listener: FlatfileListener) {
   // Generate field mappings dynamically from sheet configurations
@@ -120,6 +136,22 @@ export default function (listener: FlatfileListener) {
   providerPrivilegesBatchValidationHook(listener);
   listener.use(professionalTrainingValidationHook);
   companyProfessionalTrainingBatchValidationAction(listener);
+  listener.use(providerProfessionalAccountValidationHook);
+  listener.use(validateProviderProfessionalAccountAction);
+  listener.use(professionalReferenceValidationHook);
+  listener.use(validateProfessionalReferenceAction);
+  listener.use(fileDetailsValidationHook);
+  listener.use(validateFileDetailsAction);
+  listener.use(globalPrivilegeValidationHook);
+  listener.use(validateGlobalPrivilegeAction);
+  listener.use(healthRecordValidationHook);
+  validateHealthRecordAction(listener);
+  listener.use(otherRecordValidationHook);
+  validateOtherRecordAction(listener);
+  listener.use(workGapValidationHook);
+  validateWorkGapAction(listener);
+  listener.use(workHistoryValidationHook);
+  validateWorkHistoryAction(listener);
   listener.use(debugSpacesListener);  // Add debug listener
 
   // Add malpractice insurance deduplication action

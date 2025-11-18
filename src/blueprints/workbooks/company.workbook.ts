@@ -25,12 +25,20 @@ import { personalReferenceSheet } from "../sheets/personal-reference.sheet";
 import { companyPrivilegesSheet } from "../sheets/company-privileges.sheet";
 import { providerPrivilegesSheet } from "../sheets/provider-privileges.sheet";
 import { professionalTrainingSheet } from "../sheets/professional-training.sheet";
+import { providerProfessionalAccountSheet } from "../sheets/provider-professional-account.sheet";
+import { professionalReferenceSheet } from "../sheets/professional-reference.sheet";
+import { fileDetailsSheet } from "../sheets/file-details.sheet";
+import { globalPrivilegeSheet } from "../sheets/global-privilege.sheet";
+import { healthRecordSheet } from "../sheets/health-record.sheet";
+import { otherRecordSheet } from "../sheets/other-record.sheet";
+import { workGapSheet } from "../sheets/work-gap.sheet";
+import { workHistorySheet } from "../sheets/work-history.sheet";
 
 export const companyWorkbook: Flatfile.CreateWorkbookConfig = {
   name: "Company Workbook",
   namespace: "workbook:qgenda-company",
   labels: [ "pinned" ],
-  sheets: [ usersSheet, demographicSheet, demographicV2Sheet, demographicReferenceSheet, stateLicenseSheet, deaLicenseSheet, affiliationSheet, boardCertificationSheet, otherCertificationSheet, malpracticeInsuranceSheet, educationGapSheet, payerLocationsSheet, payerSheet, cdsCertificateSheet, cmeSheet, educationSheet, providerAppointmentDatesSheet, providerLocationDetailsSheet, providerPayerEnrollmentDatesSheet, locationSheet, driversLicenseSheet, malpracticeClaimSheet, personalReferenceSheet, companyPrivilegesSheet, providerPrivilegesSheet, professionalTrainingSheet ],
+  sheets: [ usersSheet, demographicSheet, demographicV2Sheet, demographicReferenceSheet, stateLicenseSheet, deaLicenseSheet, affiliationSheet, boardCertificationSheet, otherCertificationSheet, malpracticeInsuranceSheet, educationGapSheet, payerLocationsSheet, payerSheet, cdsCertificateSheet, cmeSheet, educationSheet, providerAppointmentDatesSheet, providerLocationDetailsSheet, providerPayerEnrollmentDatesSheet, locationSheet, driversLicenseSheet, malpracticeClaimSheet, personalReferenceSheet, companyPrivilegesSheet, providerPrivilegesSheet, professionalTrainingSheet, providerProfessionalAccountSheet, professionalReferenceSheet, fileDetailsSheet, globalPrivilegeSheet, healthRecordSheet, otherRecordSheet, workGapSheet, workHistorySheet ],
   actions: [ {
     operation: "downloadWorkbook",
     mode: "foreground",
