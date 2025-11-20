@@ -31,6 +31,7 @@ import { healthRecordSheet } from "../blueprints/sheets/health-record.sheet";
 import { otherRecordSheet } from "../blueprints/sheets/other-record.sheet";
 import { workGapSheet } from "../blueprints/sheets/work-gap.sheet";
 import { workHistorySheet } from "../blueprints/sheets/work-history.sheet";
+import { providerDemographicImportSheet } from "../blueprints/sheets/provider-demographic-import.sheet";
 
 // Generate field mappings from all sheet configurations
 export function generateFieldMappings(): { [key: string]: string } {
@@ -67,7 +68,8 @@ export function generateFieldMappings(): { [key: string]: string } {
     healthRecordSheet,
     otherRecordSheet,
     workGapSheet,
-    workHistorySheet
+    workHistorySheet,
+    providerDemographicImportSheet
   ];
 
   const mappings: { [key: string]: string } = {};

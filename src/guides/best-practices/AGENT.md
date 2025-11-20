@@ -10,6 +10,7 @@
 
 1. **Field Requirements**
    - Include all fields from specification
+   - **Always create headers in the exact order specified - DO NOT rearrange into categories**
    - Add X1-X10 custom string fields (standard requirement)
    - Use proper field types: string, enum, date, number
    - Mark required fields with constraints

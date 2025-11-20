@@ -33,12 +33,13 @@ import { healthRecordSheet } from "../sheets/health-record.sheet";
 import { otherRecordSheet } from "../sheets/other-record.sheet";
 import { workGapSheet } from "../sheets/work-gap.sheet";
 import { workHistorySheet } from "../sheets/work-history.sheet";
+import { providerDemographicImportSheet } from "../sheets/provider-demographic-import.sheet";
 
 export const companyWorkbook: Flatfile.CreateWorkbookConfig = {
   name: "Company Workbook",
   namespace: "workbook:qgenda-company",
   labels: [ "pinned" ],
-  sheets: [ usersSheet, demographicSheet, demographicV2Sheet, demographicReferenceSheet, stateLicenseSheet, deaLicenseSheet, affiliationSheet, boardCertificationSheet, otherCertificationSheet, malpracticeInsuranceSheet, educationGapSheet, payerLocationsSheet, payerSheet, cdsCertificateSheet, cmeSheet, educationSheet, providerAppointmentDatesSheet, providerLocationDetailsSheet, providerPayerEnrollmentDatesSheet, locationSheet, driversLicenseSheet, malpracticeClaimSheet, personalReferenceSheet, companyPrivilegesSheet, providerPrivilegesSheet, professionalTrainingSheet, providerProfessionalAccountSheet, professionalReferenceSheet, fileDetailsSheet, globalPrivilegeSheet, healthRecordSheet, otherRecordSheet, workGapSheet, workHistorySheet ],
+  sheets: [ usersSheet, demographicSheet, demographicV2Sheet, demographicReferenceSheet, stateLicenseSheet, deaLicenseSheet, affiliationSheet, boardCertificationSheet, otherCertificationSheet, malpracticeInsuranceSheet, educationGapSheet, payerLocationsSheet, payerSheet, cdsCertificateSheet, cmeSheet, educationSheet, providerAppointmentDatesSheet, providerLocationDetailsSheet, providerPayerEnrollmentDatesSheet, locationSheet, driversLicenseSheet, malpracticeClaimSheet, personalReferenceSheet, companyPrivilegesSheet, providerPrivilegesSheet, professionalTrainingSheet, providerProfessionalAccountSheet, professionalReferenceSheet, fileDetailsSheet, globalPrivilegeSheet, healthRecordSheet, otherRecordSheet, workGapSheet, workHistorySheet, providerDemographicImportSheet ],
   actions: [ {
     operation: "downloadWorkbook",
     mode: "foreground",

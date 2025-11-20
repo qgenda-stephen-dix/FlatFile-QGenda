@@ -72,6 +72,8 @@ import { workGapValidationHook } from "./listeners/work-gap-validation.listener"
 import { validateWorkGapAction } from "./blueprints/actions/validate-work-gap.action";
 import { workHistoryValidationHook } from "./listeners/work-history-validation.listener";
 import { validateWorkHistoryAction } from "./blueprints/actions/validate-work-history.action";
+import { providerDemographicImportValidationHook } from "./listeners/provider-demographic-import-validation.listener";
+import { validateProviderDemographicImportAction } from "./blueprints/actions/validate-provider-demographic-import.action";
 
 export default function (listener: FlatfileListener) {
   // Generate field mappings dynamically from sheet configurations
@@ -152,6 +154,8 @@ export default function (listener: FlatfileListener) {
   validateWorkGapAction(listener);
   listener.use(workHistoryValidationHook);
   validateWorkHistoryAction(listener);
+  listener.use(providerDemographicImportValidationHook);
+  validateProviderDemographicImportAction(listener);
   listener.use(debugSpacesListener);  // Add debug listener
 
   // Add malpractice insurance deduplication action

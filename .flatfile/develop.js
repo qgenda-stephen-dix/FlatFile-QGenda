@@ -167550,6 +167550,277 @@ exports.validateProviderAppointmentDatesAction = validateProviderAppointmentDate
 
 /***/ }),
 
+/***/ 63285:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.validateProviderDemographicImportAction = void 0;
+const validateProviderDemographicImportAction = (listener) => {
+    listener.on("job:ready", { job: "sheet:validateProviderDemographicImport" }, async ({ context: { jobId, sheetId }, ...event }) => {
+        try {
+            const { data: records } = await event.data;
+            // Track IDs for duplicate detection
+            const externalIdMap = new Map();
+            const npiMap = new Map();
+            const providerIdMap = new Map();
+            const internalIdMap = new Map();
+            const emrIdMap = new Map();
+            const duplicateExternalIds = new Set();
+            const duplicateNpis = new Set();
+            const duplicateProviderIds = new Set();
+            const duplicateInternalIds = new Set();
+            const duplicateEmrIds = new Set();
+            // First pass: identify duplicates within the file
+            records.forEach((record, index) => {
+                const externalId = record.get("External ID");
+                const externalIdType = record.get("External ID Type");
+                const npi = record.get("National Provider Identification Number (NPI)");
+                const providerId = record.get("Provider ID");
+                const internalId = record.get("Internal ID");
+                const emrId = record.get("EMR ID");
+                // Track External ID and Type combinations
+                if (externalId?.trim() && externalIdType?.trim()) {
+                    const idKey = `${externalIdType}:${externalId}`.toLowerCase();
+                    if (externalIdMap.has(idKey)) {
+                        duplicateExternalIds.add(idKey);
+                    }
+                    else {
+                        externalIdMap.set(idKey, index);
+                    }
+                }
+                // Track NPI duplicates
+                if (npi?.trim()) {
+                    if (npiMap.has(npi)) {
+                        duplicateNpis.add(npi);
+                    }
+                    else {
+                        npiMap.set(npi, index);
+                    }
+                }
+                // Track Provider ID duplicates
+                if (providerId?.trim()) {
+                    if (providerIdMap.has(providerId)) {
+                        duplicateProviderIds.add(providerId);
+                    }
+                    else {
+                        providerIdMap.set(providerId, index);
+                    }
+                }
+                // Track Internal ID duplicates
+                if (internalId?.trim()) {
+                    if (internalIdMap.has(internalId)) {
+                        duplicateInternalIds.add(internalId);
+                    }
+                    else {
+                        internalIdMap.set(internalId, index);
+                    }
+                }
+                // Track EMR ID duplicates
+                if (emrId?.trim()) {
+                    if (emrIdMap.has(emrId)) {
+                        duplicateEmrIds.add(emrId);
+                    }
+                    else {
+                        emrIdMap.set(emrId, index);
+                    }
+                }
+            });
+            // Second pass: apply cross-record validations
+            const validatedRecords = records.map((record, index) => {
+                const externalId = record.get("External ID");
+                const externalIdType = record.get("External ID Type");
+                const firstName = record.get("First Name");
+                const lastName = record.get("Last Name");
+                const npi = record.get("National Provider Identification Number (NPI)");
+                const providerId = record.get("Provider ID");
+                const internalId = record.get("Internal ID");
+                const emrId = record.get("EMR ID");
+                const providerType = record.get("Provider Type");
+                const corporateEmploymentType = record.get("Corporate Employment Type");
+                const countryOfBirth = record.get("Country of Birth");
+                const stateOfBirth = record.get("State of Birth");
+                const specialty = record.get("Specialty");
+                const subspecialty = record.get("Subspecialty");
+                const languagesSpoken = record.get("Languages Spoken");
+                const race = record.get("Race");
+                // Duplicate validation within import file
+                if (externalId?.trim() && externalIdType?.trim()) {
+                    const idKey = `${externalIdType}:${externalId}`.toLowerCase();
+                    if (duplicateExternalIds.has(idKey)) {
+                        record.addError("External ID", "Duplicate External ID and Type found");
+                    }
+                }
+                if (npi?.trim() && duplicateNpis.has(npi)) {
+                    record.addError("National Provider Identification Number (NPI)", "Duplicate NPI found");
+                }
+                if (providerId?.trim() && duplicateProviderIds.has(providerId)) {
+                    record.addError("Provider ID", "Duplicate Provider ID found");
+                }
+                if (internalId?.trim() && duplicateInternalIds.has(internalId)) {
+                    record.addError("Internal ID", "Duplicate Internal ID found");
+                }
+                if (emrId?.trim() && duplicateEmrIds.has(emrId)) {
+                    record.addError("EMR ID", "Duplicate EMR ID found");
+                }
+                // External ID format validation
+                if (externalId?.trim()) {
+                    // Validate NPI or Provider ID format (not checking database existence, just format)
+                    if (externalIdType === "NPI" && !/^\d{10}$/.test(externalId)) {
+                        record.addError("External ID", "External ID not valid");
+                    }
+                    // Add other format validations as needed for different ID types
+                    if (externalIdType === "ProviderID" && externalId.length > 64) {
+                        record.addError("External ID", "External ID not valid");
+                    }
+                }
+                // Provider matching simulation (would connect to actual database)
+                if (externalId?.trim() && externalIdType?.trim()) {
+                    // Simulate provider lookup
+                    if (externalId === "NOTFOUND") {
+                        record.addError("External ID", "No matching provider found");
+                    }
+                    // Simulate multiple matches
+                    if (externalId === "MULTIPLE") {
+                        record.addError("External ID", `${externalIdType} matches the ${externalIdType} of more than one existing provider`);
+                    }
+                    // Simulate ID matches existing provider (would be database lookup)
+                    if (externalId === "EXISTS123") {
+                        record.addError("External ID", `${externalIdType} matches the ${externalIdType} of an existing provider`);
+                    }
+                }
+                // Provider Type validation (would connect to company settings)
+                if (providerType?.trim()) {
+                    // Simulate company-specific provider type validation
+                    const validProviderTypes = ["Physician", "Nurse Practitioner", "Physician Assistant", "Registered Nurse"];
+                    if (!validProviderTypes.includes(providerType)) {
+                        record.addError("Provider Type", "Provider Type not defined for company");
+                    }
+                }
+                // Corporate Employment Type validation (would connect to company settings)
+                if (corporateEmploymentType?.trim()) {
+                    // Simulate company-specific employment type validation
+                    const validEmploymentTypes = ["Employee", "Contractor", "Volunteer", "Locum Tenens"];
+                    if (!validEmploymentTypes.includes(corporateEmploymentType)) {
+                        record.addError("Corporate Employment Type", "Corporate Employment Type not defined for company");
+                    }
+                }
+                // Country and State cross-validation
+                if (countryOfBirth && stateOfBirth) {
+                    // Simulate country/state validation
+                    if (countryOfBirth === "United States" || countryOfBirth === "US") {
+                        const usStates = ["AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"];
+                        if (!usStates.includes(stateOfBirth.toUpperCase())) {
+                            record.addWarning("State of Birth", `${stateOfBirth} is not a valid subdivison value for Country of Birth.`);
+                        }
+                    }
+                }
+                // Country of Birth validation (simulate company settings)
+                if (countryOfBirth?.trim()) {
+                    // This would check against Settings > Configurable Lists > Countries
+                    const recognizedCountries = ["United States", "Canada", "Mexico", "United Kingdom", "Germany", "France", "India", "China", "Japan"];
+                    if (!recognizedCountries.includes(countryOfBirth)) {
+                        record.addError("Country of Birth", "Country of Birth is not recognized");
+                    }
+                }
+                // State validation for existing records (simulate database check)
+                if (stateOfBirth && !countryOfBirth && externalId?.trim()) {
+                    // This would check if updating existing record without providing country
+                    record.addError("State of Birth", "Country of Birth and State of Birth must be provided when updating State of Birth.");
+                }
+                // Specialty validation (simulate Settings > Configurable Lists)
+                if (specialty?.trim()) {
+                    const validSpecialties = ["Internal Medicine", "Cardiology", "Emergency Medicine", "Family Medicine", "Surgery", "Pediatrics", "Neurology", "Orthopedics", "Radiology", "Anesthesiology"];
+                    if (!validSpecialties.includes(specialty)) {
+                        record.addError("Specialty", "Specialty not supported");
+                    }
+                }
+                // Subspecialty validation (simulate Settings > Configurable Lists)
+                if (subspecialty?.trim()) {
+                    const validSubspecialties = ["Interventional Cardiology", "Pediatric Cardiology", "Emergency Critical Care", "Sports Medicine", "Neurosurgery", "Orthopedic Surgery"];
+                    if (!validSubspecialties.includes(subspecialty)) {
+                        record.addError("Subspecialty", "Subspecialty not supported");
+                    }
+                }
+                // Languages validation (simulate company language list)
+                if (languagesSpoken?.trim()) {
+                    const languages = languagesSpoken.split("|").map(lang => lang.trim());
+                    const validLanguages = ["English", "Spanish", "French", "German", "Chinese", "Japanese", "Korean", "Arabic", "Portuguese", "Italian"];
+                    languages.forEach(language => {
+                        if (language && !validLanguages.includes(language)) {
+                            record.addError("Languages Spoken", "Languages Spoken not supported");
+                        }
+                    });
+                }
+                // Race validation (simulate drop-down values)
+                if (race?.trim()) {
+                    const validRaces = ["American Indian or Alaska Native", "Asian", "Black or African American", "Native Hawaiian or Other Pacific Islander", "White", "Other", "Declined to Answer"];
+                    if (!validRaces.includes(race)) {
+                        record.addError("Race", "Race not supported");
+                    }
+                }
+                // Name matching warning (simulate existing provider check)
+                if (firstName?.trim() && lastName?.trim()) {
+                    // This would check against existing providers in the database
+                    if (firstName.toLowerCase() === "john" && lastName.toLowerCase() === "doe") {
+                        record.addWarning("First Name", "Provider's First and Last Name match the First and Last Name of an existing provider.");
+                    }
+                }
+                // Provider inactive status simulation (would connect to actual provider status)
+                if (externalId === "INACTIVE456") {
+                    record.addWarning("External ID", "Provider was updated but is inactive.");
+                }
+                // User Defined Fields validation (simulation)
+                // In real implementation, this would validate against actual UDF configuration
+                // For now, we'll simulate some common UDF patterns
+                // Text Input UDF simulation
+                const simulateTextUDF = (value, fieldName, maxLength = 50) => {
+                    if (value && value.length > maxLength) {
+                        record.addError(fieldName, `${fieldName} exceeds character limit of ${maxLength}`);
+                    }
+                };
+                // Checkbox UDF simulation
+                const simulateCheckboxUDF = (value, fieldName) => {
+                    if (value && !["T", "F", ""].includes(value)) {
+                        record.addError(fieldName, `${fieldName} must be 'T', 'F' or blank`);
+                    }
+                };
+                // Date UDF simulation
+                const simulateDateUDF = (value, fieldName) => {
+                    const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+                    if (value && !dateRegex.test(value)) {
+                        record.addError(fieldName, `${fieldName} must be formatted as m/d/yyyy`);
+                    }
+                };
+                // Link UDF simulation
+                const simulateLinkUDF = (value, fieldName) => {
+                    const urlRegex = /^https?:\/\/[^\s]+$/;
+                    if (value && !urlRegex.test(value)) {
+                        record.addError(fieldName, `${fieldName} is not a valid URL`);
+                    }
+                };
+                // Multi-Line Text UDF simulation (would check against Settings-defined limit)
+                const simulateMultiLineUDF = (value, fieldName, maxLength = 1000) => {
+                    if (value && value.length > maxLength) {
+                        record.addError(fieldName, `${fieldName} exceeds character limit of ${maxLength}.`);
+                    }
+                };
+                return record;
+            });
+            await event.data(validatedRecords);
+        }
+        catch (error) {
+            console.error("Error in Provider Demographic Import validation:", error);
+            throw error;
+        }
+    });
+};
+exports.validateProviderDemographicImportAction = validateProviderDemographicImportAction;
+
+
+/***/ }),
+
 /***/ 55587:
 /***/ ((__unused_webpack_module, exports) => {
 
@@ -175994,6 +176265,719 @@ exports.providerAppointmentDatesSheet = {
 
 /***/ }),
 
+/***/ 60705:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.providerDemographicImportSheet = void 0;
+exports.providerDemographicImportSheet = {
+    name: "Provider Demographic Import Format",
+    slug: "provider-demographic-import",
+    access: ["*"],
+    fields: [
+        // Following exact specification order
+        {
+            key: "External ID",
+            type: "string",
+            label: "External ID",
+            description: "Leave blank to create new provider. Required for updates."
+        },
+        {
+            key: "External ID Type",
+            type: "enum",
+            label: "External ID Type",
+            description: "Leave blank to create new provider. Required for updates.",
+            config: {
+                options: [
+                    { value: "NPI", label: "NPI" },
+                    { value: "InternalID", label: "InternalID" },
+                    { value: "ProviderID", label: "ProviderID" },
+                    { value: "EmrID", label: "EmrID" }
+                ]
+            }
+        },
+        {
+            key: "Salutation",
+            type: "enum",
+            label: "Salutation",
+            description: "Salutation prefix",
+            config: {
+                options: [
+                    { value: "Mr.", label: "Mr." },
+                    { value: "Ms.", label: "Ms." },
+                    { value: "Mrs.", label: "Mrs." },
+                    { value: "Dr.", label: "Dr." }
+                ]
+            }
+        },
+        {
+            key: "Pronouns",
+            type: "enum",
+            label: "Pronouns",
+            description: "Preferred pronouns",
+            config: {
+                options: [
+                    { value: "She/Her/Hers", label: "She/Her/Hers" },
+                    { value: "He/Him/His", label: "He/Him/His" },
+                    { value: "They/Them/Theirs", label: "They/Them/Theirs" },
+                    { value: "Ze/Hir/Hirs", label: "Ze/Hir/Hirs" }
+                ]
+            }
+        },
+        {
+            key: "First Name",
+            type: "string",
+            label: "First Name",
+            description: "Required Field - Maximum 50 characters",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "Middle Name",
+            type: "string",
+            label: "Middle Name",
+            description: "Maximum 50 characters"
+        },
+        {
+            key: "Last Name",
+            type: "string",
+            label: "Last Name",
+            description: "Required Field - Maximum 50 characters",
+            constraints: [
+                {
+                    type: "required"
+                }
+            ]
+        },
+        {
+            key: "Alternate First Name",
+            type: "string",
+            label: "Alternate First Name",
+            description: "Maximum 50 characters"
+        },
+        {
+            key: "Alternate Middle Name",
+            type: "string",
+            label: "Alternate Middle Name",
+            description: "Maximum 50 characters"
+        },
+        {
+            key: "Alternate Last Name",
+            type: "string",
+            label: "Alternate Last Name",
+            description: "Maximum 50 characters"
+        },
+        {
+            key: "Alternate Name Start Date",
+            type: "date",
+            label: "Alternate Name Start Date",
+            description: "Must be formatted as m/d/yyyy"
+        },
+        {
+            key: "Alternate Name End Date",
+            type: "date",
+            label: "Alternate Name End Date",
+            description: "Must be formatted as m/d/yyyy"
+        },
+        {
+            key: "Provider Type",
+            type: "string",
+            label: "Provider Type",
+            description: "Must match company-defined provider types. Required for new providers."
+        },
+        {
+            key: "National Provider Identification Number (NPI)",
+            type: "string",
+            label: "National Provider Identification Number (NPI)",
+            description: "Must be exactly 10 digits"
+        },
+        {
+            key: "Auto-Verify NPI?",
+            type: "enum",
+            label: "Auto-Verify NPI?",
+            description: "Auto-verify NPI setting",
+            config: {
+                options: [
+                    { value: "Yes", label: "Yes" },
+                    { value: "No", label: "No" }
+                ]
+            }
+        },
+        {
+            key: "Social Security Number (SSN)",
+            type: "string",
+            label: "Social Security Number (SSN)",
+            description: "Must be 9 digits (###-##-####)"
+        },
+        {
+            key: "Birth Date",
+            type: "date",
+            label: "Birth Date",
+            description: "Must be formatted as m/d/yyyy"
+        },
+        {
+            key: "Country of Birth",
+            type: "string",
+            label: "Country of Birth",
+            description: "Maximum 100 characters - must match company settings"
+        },
+        {
+            key: "State of Birth",
+            type: "string",
+            label: "State of Birth",
+            description: "Maximum 50 characters - must be valid subdivision for country"
+        },
+        {
+            key: "City of Birth",
+            type: "string",
+            label: "City of Birth",
+            description: "Maximum 100 characters"
+        },
+        {
+            key: "Gender",
+            type: "enum",
+            label: "Gender",
+            description: "Gender identification",
+            config: {
+                options: [
+                    { value: "Male", label: "Male" },
+                    { value: "Female", label: "Female" },
+                    { value: "Transgender", label: "Transgender" },
+                    { value: "Not Specified", label: "Not Specified" }
+                ]
+            }
+        },
+        {
+            key: "Ethnicity",
+            type: "enum",
+            label: "Ethnicity",
+            description: "Ethnicity classification",
+            config: {
+                options: [
+                    { value: "American Indian or Alaska Native", label: "American Indian or Alaska Native" },
+                    { value: "Black or African American", label: "Black or African American" },
+                    { value: "Hispanic or Latino", label: "Hispanic or Latino" },
+                    { value: "Native Hawaiian or Pacific Islander", label: "Native Hawaiian or Pacific Islander" },
+                    { value: "White", label: "White" }
+                ]
+            }
+        },
+        {
+            key: "Citizenship",
+            type: "string",
+            label: "Citizenship",
+            description: "Maximum 100 characters"
+        },
+        {
+            key: "Work Visa Type",
+            type: "enum",
+            label: "Work Visa Type",
+            description: "Work visa classification",
+            config: {
+                options: [
+                    { value: "H-1B", label: "H-1B" },
+                    { value: "H-2B", label: "H-2B" },
+                    { value: "H-3B", label: "H-3B" },
+                    { value: "L", label: "L" },
+                    { value: "O", label: "O" },
+                    { value: "P", label: "P" },
+                    { value: "R", label: "R" },
+                    { value: "TN", label: "TN" }
+                ]
+            }
+        },
+        {
+            key: "Visa Expiration",
+            type: "date",
+            label: "Visa Expiration",
+            description: "Must be formatted as m/d/yyyy. Requires Work Visa Type."
+        },
+        {
+            key: "Visa Number",
+            type: "string",
+            label: "Visa Number",
+            description: "Maximum 20 characters. Requires Work Visa Type."
+        },
+        {
+            key: "Accepting New Patients",
+            type: "enum",
+            label: "Accepting New Patients",
+            description: "Patient acceptance status",
+            config: {
+                options: [
+                    { value: "None", label: "None" },
+                    { value: "Yes", label: "Yes" },
+                    { value: "No", label: "No" }
+                ]
+            }
+        },
+        {
+            key: "Languages Spoken",
+            type: "string",
+            label: "Languages Spoken",
+            description: "Pipe-delimited (|) values"
+        },
+        {
+            key: "Marital Status",
+            type: "enum",
+            label: "Marital Status",
+            description: "Marital status classification",
+            config: {
+                options: [
+                    { value: "Single", label: "Single" },
+                    { value: "Married", label: "Married" },
+                    { value: "Divorced", label: "Divorced" },
+                    { value: "Separated", label: "Separated" },
+                    { value: "Widowed", label: "Widowed" }
+                ]
+            }
+        },
+        {
+            key: "Spouse Full Name",
+            type: "string",
+            label: "Spouse Full Name",
+            description: "Maximum 256 characters"
+        },
+        {
+            key: "Corporate Employment Type",
+            type: "string",
+            label: "Corporate Employment Type",
+            description: "Must be valid for the company"
+        },
+        {
+            key: "Supervising Physician's Name",
+            type: "string",
+            label: "Supervising Physician's Name",
+            description: "Maximum 100 characters"
+        },
+        {
+            key: "Time in this Position Start Date",
+            type: "date",
+            label: "Time in this Position Start Date",
+            description: "Must be formatted as m/d/yyyy"
+        },
+        {
+            key: "Time in this Position End Date",
+            type: "date",
+            label: "Time in this Position End Date",
+            description: "Must be formatted as m/d/yyyy"
+        },
+        {
+            key: "Specialty",
+            type: "string",
+            label: "Specialty",
+            description: "Maximum 100 characters - must be defined in Settings > Configurable Lists"
+        },
+        {
+            key: "Subspecialty",
+            type: "string",
+            label: "Subspecialty",
+            description: "Maximum 100 characters - must be defined in Settings > Configurable Lists"
+        },
+        {
+            key: "Taxonomy",
+            type: "string",
+            label: "Taxonomy",
+            description: "Maximum 100 characters"
+        },
+        {
+            key: "Medicare Number",
+            type: "string",
+            label: "Medicare Number",
+            description: "Maximum 50 characters"
+        },
+        {
+            key: "Medicaid Number",
+            type: "string",
+            label: "Medicaid Number",
+            description: "Maximum 50 characters"
+        },
+        {
+            key: "Login Email/Contact Email",
+            type: "string",
+            label: "Login Email/Contact Email",
+            description: "Maximum 128 characters - must be valid email format"
+        },
+        {
+            key: "Other Email",
+            type: "string",
+            label: "Other Email",
+            description: "Maximum 100 characters - must be valid email format"
+        },
+        {
+            key: "Home Phone",
+            type: "string",
+            label: "Home Phone",
+            description: "Must be 9, 10, or 12-digit number without formatting"
+        },
+        {
+            key: "Mobile Phone",
+            type: "string",
+            label: "Mobile Phone",
+            description: "Must be 9, 10, or 12-digit number without formatting"
+        },
+        {
+            key: "Pager",
+            type: "string",
+            label: "Pager",
+            description: "Must be 9, 10, or 12-digit number without formatting"
+        },
+        {
+            key: "Preferred Contact Method",
+            type: "enum",
+            label: "Preferred Contact Method",
+            description: "Preferred method of contact",
+            config: {
+                options: [
+                    { value: "Login Email", label: "Login Email" },
+                    { value: "Other Email", label: "Other Email" },
+                    { value: "Home Phone", label: "Home Phone" },
+                    { value: "Mobile Phone", label: "Mobile Phone" },
+                    { value: "Pager", label: "Pager" }
+                ]
+            }
+        },
+        {
+            key: "Address Line 1",
+            type: "string",
+            label: "Address Line 1",
+            description: "Maximum 100 characters"
+        },
+        {
+            key: "Address Line 2",
+            type: "string",
+            label: "Address Line 2",
+            description: "Maximum 50 characters"
+        },
+        {
+            key: "City",
+            type: "string",
+            label: "City",
+            description: "Maximum 50 characters"
+        },
+        {
+            key: "State",
+            type: "string",
+            label: "State",
+            description: "Must match state drop-down (abbreviation)"
+        },
+        {
+            key: "Zip",
+            type: "string",
+            label: "Zip",
+            description: "Maximum 10 alphanumeric characters"
+        },
+        {
+            key: "Country",
+            type: "string",
+            label: "Country",
+            description: "Maximum 100 characters"
+        },
+        {
+            key: "Emergency Contact First Name",
+            type: "string",
+            label: "Emergency Contact First Name",
+            description: "Maximum 100 characters"
+        },
+        {
+            key: "Emergency Contact Last Name",
+            type: "string",
+            label: "Emergency Contact Last Name",
+            description: "Maximum 100 characters"
+        },
+        {
+            key: "Emergency Contact Phone Number",
+            type: "string",
+            label: "Emergency Contact Phone Number",
+            description: "Must be 9, 10, or 12-digit number without formatting"
+        },
+        {
+            key: "Emergency Contact Email",
+            type: "string",
+            label: "Emergency Contact Email",
+            description: "Maximum 100 characters - must be valid email format"
+        },
+        {
+            key: "Tax ID",
+            type: "string",
+            label: "Tax ID",
+            description: "Maximum 100 characters"
+        },
+        {
+            key: "Tax Name",
+            type: "string",
+            label: "Tax Name",
+            description: "Maximum 100 characters"
+        },
+        {
+            key: "Provider ID",
+            type: "string",
+            label: "Provider ID",
+            description: "Maximum 64 characters"
+        },
+        {
+            key: "Internal ID",
+            type: "string",
+            label: "Internal ID",
+            description: "Maximum 100 characters"
+        },
+        {
+            key: "EMR ID",
+            type: "string",
+            label: "EMR ID",
+            description: "Maximum 64 characters"
+        },
+        {
+            key: "SSO ID",
+            type: "string",
+            label: "SSO ID",
+            description: "Single Sign-On identifier"
+        },
+        {
+            key: "Suffix",
+            type: "enum",
+            label: "Suffix",
+            description: "Name suffix",
+            config: {
+                options: [
+                    { value: "Sr", label: "Sr" },
+                    { value: "Jr", label: "Jr" },
+                    { value: "II", label: "II" },
+                    { value: "III", label: "III" },
+                    { value: "IV", label: "IV" }
+                ]
+            }
+        },
+        {
+            key: "Preferred Name",
+            type: "string",
+            label: "Preferred Name",
+            description: "Maximum 256 characters"
+        },
+        {
+            key: "Alternate Name Suffix",
+            type: "enum",
+            label: "Alternate Name Suffix",
+            description: "Alternate name suffix",
+            config: {
+                options: [
+                    { value: "Sr", label: "Sr" },
+                    { value: "Jr", label: "Jr" },
+                    { value: "II", label: "II" },
+                    { value: "III", label: "III" },
+                    { value: "IV", label: "IV" }
+                ]
+            }
+        },
+        {
+            key: "UPIN",
+            type: "string",
+            label: "UPIN",
+            description: "Must be 6 character alphanumeric value"
+        },
+        {
+            key: "County of Birth",
+            type: "string",
+            label: "County of Birth",
+            description: "Maximum 100 characters"
+        },
+        {
+            key: "Spouse Phone Number",
+            type: "string",
+            label: "Spouse Phone Number",
+            description: "Must be 9, 10, or 12-digit number without formatting"
+        },
+        {
+            key: "Military Start Date",
+            type: "date",
+            label: "Military Start Date",
+            description: "Must be formatted as m/d/yyyy"
+        },
+        {
+            key: "Military End Date",
+            type: "date",
+            label: "Military End Date",
+            description: "Must be formatted as m/d/yyyy"
+        },
+        {
+            key: "Military Branch",
+            type: "enum",
+            label: "Military Branch",
+            description: "Military service branch",
+            config: {
+                options: [
+                    { value: "Air Force", label: "Air Force" },
+                    { value: "Army", label: "Army" },
+                    { value: "Coast Guard", label: "Coast Guard" },
+                    { value: "Marine Corps", label: "Marine Corps" },
+                    { value: "Military Resident", label: "Military Resident" },
+                    { value: "Navy", label: "Navy" },
+                    { value: "Other Government Provider", label: "Other Government Provider" },
+                    { value: "Space Force", label: "Space Force" }
+                ]
+            }
+        },
+        {
+            key: "Military Status",
+            type: "enum",
+            label: "Military Status",
+            description: "Military service status",
+            config: {
+                options: [
+                    { value: "Active", label: "Active" },
+                    { value: "Government Civilian", label: "Government Civilian" },
+                    { value: "Guard", label: "Guard" },
+                    { value: "Inactive", label: "Inactive" },
+                    { value: "Reserve", label: "Reserve" },
+                    { value: "Retired", label: "Retired" }
+                ]
+            }
+        },
+        {
+            key: "Military Title",
+            type: "string",
+            label: "Military Title",
+            description: "Maximum 200 characters"
+        },
+        {
+            key: "County",
+            type: "string",
+            label: "County",
+            description: "Maximum 100 characters"
+        },
+        {
+            key: "Assistant Name",
+            type: "string",
+            label: "Assistant Name",
+            description: "Maximum 256 characters"
+        },
+        {
+            key: "Assistant Email",
+            type: "string",
+            label: "Assistant Email",
+            description: "Maximum 100 characters - must be valid email format"
+        },
+        {
+            key: "Assistant Phone",
+            type: "string",
+            label: "Assistant Phone",
+            description: "Must be 9, 10, or 12-digit number without formatting"
+        },
+        {
+            key: "Preferred Credentials",
+            type: "string",
+            label: "Preferred Credentials",
+            description: "Maximum 50 characters"
+        },
+        {
+            key: "Affiliation Verification Available",
+            type: "enum",
+            label: "Affiliation Verification Available",
+            description: "Affiliation verification status",
+            config: {
+                options: [
+                    { value: "Yes", label: "Yes" },
+                    { value: "No", label: "No" }
+                ]
+            }
+        },
+        {
+            key: "Primary Credentialing Specialist Email",
+            type: "string",
+            label: "Primary Credentialing Specialist Email",
+            description: "Maximum 200 characters - must be valid email format"
+        },
+        {
+            key: "Disable Expiring Notifications",
+            type: "enum",
+            label: "Disable Expiring Notifications",
+            description: "Notification preference setting",
+            config: {
+                options: [
+                    { value: "Yes", label: "Yes" },
+                    { value: "No", label: "No" }
+                ]
+            }
+        },
+        {
+            key: "Race",
+            type: "string",
+            label: "Race",
+            description: "Must match drop-down values in system"
+        },
+        // Provider User Defined Fields - these are positioned as per specification
+        // X1-X10 custom fields
+        {
+            key: "X1",
+            type: "string",
+            label: "X1",
+            description: "User defined field 1"
+        },
+        {
+            key: "X2",
+            type: "string",
+            label: "X2",
+            description: "User defined field 2"
+        },
+        {
+            key: "X3",
+            type: "string",
+            label: "X3",
+            description: "User defined field 3"
+        },
+        {
+            key: "X4",
+            type: "string",
+            label: "X4",
+            description: "User defined field 4"
+        },
+        {
+            key: "X5",
+            type: "string",
+            label: "X5",
+            description: "User defined field 5"
+        },
+        {
+            key: "X6",
+            type: "string",
+            label: "X6",
+            description: "User defined field 6"
+        },
+        {
+            key: "X7",
+            type: "string",
+            label: "X7",
+            description: "User defined field 7"
+        },
+        {
+            key: "X8",
+            type: "string",
+            label: "X8",
+            description: "User defined field 8"
+        },
+        {
+            key: "X9",
+            type: "string",
+            label: "X9",
+            description: "User defined field 9"
+        },
+        {
+            key: "X10",
+            type: "string",
+            label: "X10",
+            description: "User defined field 10"
+        }
+    ]
+};
+
+
+/***/ }),
+
 /***/ 82499:
 /***/ ((__unused_webpack_module, exports) => {
 
@@ -177708,11 +178692,12 @@ const health_record_sheet_1 = __nccwpck_require__(66854);
 const other_record_sheet_1 = __nccwpck_require__(12132);
 const work_gap_sheet_1 = __nccwpck_require__(73317);
 const work_history_sheet_1 = __nccwpck_require__(80627);
+const provider_demographic_import_sheet_1 = __nccwpck_require__(60705);
 exports.companyWorkbook = {
     name: "Company Workbook",
     namespace: "workbook:qgenda-company",
     labels: ["pinned"],
-    sheets: [users_sheet_1.usersSheet, demographic_sheet_1.demographicSheet, demographic_v2_sheet_1.demographicV2Sheet, demographic_reference_sheet_1.demographicReferenceSheet, state_license_sheet_1.stateLicenseSheet, dea_license_sheet_1.deaLicenseSheet, affiliation_sheet_1.affiliationSheet, board_certification_sheet_1.boardCertificationSheet, other_certification_sheet_1.otherCertificationSheet, malpractice_insurance_sheet_1.malpracticeInsuranceSheet, education_gap_sheet_1.educationGapSheet, payer_locations_sheet_1.payerLocationsSheet, payer_sheet_1.payerSheet, cds_certificate_sheet_1.cdsCertificateSheet, cme_sheet_1.cmeSheet, education_sheet_1.educationSheet, provider_appointment_dates_sheet_1.providerAppointmentDatesSheet, provider_location_details_sheet_1.providerLocationDetailsSheet, provider_payer_enrollment_dates_sheet_1.providerPayerEnrollmentDatesSheet, location_sheet_1.locationSheet, drivers_license_sheet_1.driversLicenseSheet, malpractice_claim_sheet_1.malpracticeClaimSheet, personal_reference_sheet_1.personalReferenceSheet, company_privileges_sheet_1.companyPrivilegesSheet, provider_privileges_sheet_1.providerPrivilegesSheet, professional_training_sheet_1.professionalTrainingSheet, provider_professional_account_sheet_1.providerProfessionalAccountSheet, professional_reference_sheet_1.professionalReferenceSheet, file_details_sheet_1.fileDetailsSheet, global_privilege_sheet_1.globalPrivilegeSheet, health_record_sheet_1.healthRecordSheet, other_record_sheet_1.otherRecordSheet, work_gap_sheet_1.workGapSheet, work_history_sheet_1.workHistorySheet],
+    sheets: [users_sheet_1.usersSheet, demographic_sheet_1.demographicSheet, demographic_v2_sheet_1.demographicV2Sheet, demographic_reference_sheet_1.demographicReferenceSheet, state_license_sheet_1.stateLicenseSheet, dea_license_sheet_1.deaLicenseSheet, affiliation_sheet_1.affiliationSheet, board_certification_sheet_1.boardCertificationSheet, other_certification_sheet_1.otherCertificationSheet, malpractice_insurance_sheet_1.malpracticeInsuranceSheet, education_gap_sheet_1.educationGapSheet, payer_locations_sheet_1.payerLocationsSheet, payer_sheet_1.payerSheet, cds_certificate_sheet_1.cdsCertificateSheet, cme_sheet_1.cmeSheet, education_sheet_1.educationSheet, provider_appointment_dates_sheet_1.providerAppointmentDatesSheet, provider_location_details_sheet_1.providerLocationDetailsSheet, provider_payer_enrollment_dates_sheet_1.providerPayerEnrollmentDatesSheet, location_sheet_1.locationSheet, drivers_license_sheet_1.driversLicenseSheet, malpractice_claim_sheet_1.malpracticeClaimSheet, personal_reference_sheet_1.personalReferenceSheet, company_privileges_sheet_1.companyPrivilegesSheet, provider_privileges_sheet_1.providerPrivilegesSheet, professional_training_sheet_1.professionalTrainingSheet, provider_professional_account_sheet_1.providerProfessionalAccountSheet, professional_reference_sheet_1.professionalReferenceSheet, file_details_sheet_1.fileDetailsSheet, global_privilege_sheet_1.globalPrivilegeSheet, health_record_sheet_1.healthRecordSheet, other_record_sheet_1.otherRecordSheet, work_gap_sheet_1.workGapSheet, work_history_sheet_1.workHistorySheet, provider_demographic_import_sheet_1.providerDemographicImportSheet],
     actions: [{
             operation: "downloadWorkbook",
             mode: "foreground",
@@ -177805,6 +178790,8 @@ const work_gap_validation_listener_1 = __nccwpck_require__(66354);
 const validate_work_gap_action_1 = __nccwpck_require__(39172);
 const work_history_validation_listener_1 = __nccwpck_require__(7044);
 const validate_work_history_action_1 = __nccwpck_require__(68444);
+const provider_demographic_import_validation_listener_1 = __nccwpck_require__(47413);
+const validate_provider_demographic_import_action_1 = __nccwpck_require__(63285);
 function default_1(listener) {
     // Generate field mappings dynamically from sheet configurations
     const fieldMappings = (0, field_mappings_1.generateFieldMappings)();
@@ -177882,6 +178869,8 @@ function default_1(listener) {
     (0, validate_work_gap_action_1.validateWorkGapAction)(listener);
     listener.use(work_history_validation_listener_1.workHistoryValidationHook);
     (0, validate_work_history_action_1.validateWorkHistoryAction)(listener);
+    listener.use(provider_demographic_import_validation_listener_1.providerDemographicImportValidationHook);
+    (0, validate_provider_demographic_import_action_1.validateProviderDemographicImportAction)(listener);
     listener.use(debug_spaces_listener_1.debugSpacesListener); // Add debug listener
     // Add malpractice insurance deduplication action
     (0, malpractice_deduplication_action_1.malpracticeDeduplicationAction)(listener);
@@ -183018,6 +184007,360 @@ exports.providerAppointmentDatesValidationHook = providerAppointmentDatesValidat
 
 /***/ }),
 
+/***/ 47413:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.providerDemographicImportValidationHook = void 0;
+const plugin_record_hook_1 = __nccwpck_require__(32095);
+const providerDemographicImportValidationHook = (listener) => {
+    listener.use((0, plugin_record_hook_1.recordHook)("provider-demographic-import", (record) => {
+        // Get all field values
+        const externalId = record.get("External ID");
+        const externalIdType = record.get("External ID Type");
+        const salutation = record.get("Salutation");
+        const pronouns = record.get("Pronouns");
+        const firstName = record.get("First Name");
+        const middleName = record.get("Middle Name");
+        const lastName = record.get("Last Name");
+        const alternateFirstName = record.get("Alternate First Name");
+        const alternateMiddleName = record.get("Alternate Middle Name");
+        const alternateLastName = record.get("Alternate Last Name");
+        const alternateNameStartDate = record.get("Alternate Name Start Date");
+        const alternateNameEndDate = record.get("Alternate Name End Date");
+        const providerType = record.get("Provider Type");
+        const npi = record.get("National Provider Identification Number (NPI)");
+        const autoVerifyNpi = record.get("Auto-Verify NPI?");
+        const ssn = record.get("Social Security Number (SSN)");
+        const birthDate = record.get("Birth Date");
+        const countryOfBirth = record.get("Country of Birth");
+        const stateOfBirth = record.get("State of Birth");
+        const cityOfBirth = record.get("City of Birth");
+        const countyOfBirth = record.get("County of Birth");
+        const gender = record.get("Gender");
+        const ethnicity = record.get("Ethnicity");
+        const race = record.get("Race");
+        const citizenship = record.get("Citizenship");
+        const workVisaType = record.get("Work Visa Type");
+        const visaExpiration = record.get("Visa Expiration");
+        const visaNumber = record.get("Visa Number");
+        const acceptingNewPatients = record.get("Accepting New Patients");
+        const languagesSpoken = record.get("Languages Spoken");
+        const maritalStatus = record.get("Marital Status");
+        const spouseFullName = record.get("Spouse Full Name");
+        const spousePhoneNumber = record.get("Spouse Phone Number");
+        const corporateEmploymentType = record.get("Corporate Employment Type");
+        const supervisingPhysiciansName = record.get("Supervising Physician's Name");
+        const timeInPositionStartDate = record.get("Time in this Position Start Date");
+        const timeInPositionEndDate = record.get("Time in this Position End Date");
+        const specialty = record.get("Specialty");
+        const subspecialty = record.get("Subspecialty");
+        const taxonomy = record.get("Taxonomy");
+        const medicareNumber = record.get("Medicare Number");
+        const medicaidNumber = record.get("Medicaid Number");
+        const loginEmail = record.get("Login Email/Contact Email");
+        const otherEmail = record.get("Other Email");
+        const homePhone = record.get("Home Phone");
+        const mobilePhone = record.get("Mobile Phone");
+        const pager = record.get("Pager");
+        const preferredContactMethod = record.get("Preferred Contact Method");
+        const addressLine1 = record.get("Address Line 1");
+        const addressLine2 = record.get("Address Line 2");
+        const city = record.get("City");
+        const state = record.get("State");
+        const zip = record.get("Zip");
+        const country = record.get("Country");
+        const county = record.get("County");
+        const emergencyContactFirstName = record.get("Emergency Contact First Name");
+        const emergencyContactLastName = record.get("Emergency Contact Last Name");
+        const emergencyContactPhoneNumber = record.get("Emergency Contact Phone Number");
+        const emergencyContactEmail = record.get("Emergency Contact Email");
+        const taxId = record.get("Tax ID");
+        const taxName = record.get("Tax Name");
+        const providerId = record.get("Provider ID");
+        const internalId = record.get("Internal ID");
+        const emrId = record.get("EMR ID");
+        const ssoId = record.get("SSO ID");
+        const suffix = record.get("Suffix");
+        const preferredName = record.get("Preferred Name");
+        const alternateNameSuffix = record.get("Alternate Name Suffix");
+        const upin = record.get("UPIN");
+        const militaryStartDate = record.get("Military Start Date");
+        const militaryEndDate = record.get("Military End Date");
+        const militaryBranch = record.get("Military Branch");
+        const militaryStatus = record.get("Military Status");
+        const militaryTitle = record.get("Military Title");
+        const assistantName = record.get("Assistant Name");
+        const assistantEmail = record.get("Assistant Email");
+        const assistantPhone = record.get("Assistant Phone");
+        const preferredCredentials = record.get("Preferred Credentials");
+        const affiliationVerificationAvailable = record.get("Affiliation Verification Available");
+        const primaryCredentialingSpecialistEmail = record.get("Primary Credentialing Specialist Email");
+        const disableExpiringNotifications = record.get("Disable Expiring Notifications");
+        // Basic required field validation
+        if (!firstName?.trim()) {
+            record.addError("First Name", "First Name required");
+        }
+        if (!lastName?.trim()) {
+            record.addError("Last Name", "Last Name required");
+        }
+        // External ID validation for updates
+        if (externalId?.trim() && !externalIdType?.trim()) {
+            record.addWarning("External ID Type", "External ID Type required when External ID is provided");
+        }
+        if (externalIdType?.trim() && !externalId?.trim()) {
+            record.addWarning("External ID", "External ID required when External ID Type is provided");
+        }
+        // Character limit validations
+        if (firstName && firstName.length > 50) {
+            record.addError("First Name", "First Name exceeds character limit of 50");
+        }
+        if (middleName && middleName.length > 50) {
+            record.addError("Middle Name", "Middle Name exceeds character limit of 50");
+        }
+        if (lastName && lastName.length > 50) {
+            record.addError("Last Name", "Last Name exceeds character limit of 50");
+        }
+        if (alternateFirstName && alternateFirstName.length > 50) {
+            record.addError("Alternate First Name", "Alternate First Name exceeds character limit of 50");
+        }
+        if (alternateMiddleName && alternateMiddleName.length > 50) {
+            record.addError("Alternate Middle Name", "Alternate Middle Name exceeds character limit of 50");
+        }
+        if (alternateLastName && alternateLastName.length > 50) {
+            record.addError("Alternate Last Name", "Alternate Last Name exceeds character limit of 50");
+        }
+        if (providerType && providerType.length > 100) {
+            record.addError("Provider Type", "Provider Type exceeds character limit of 100");
+        }
+        if (countryOfBirth && countryOfBirth.length > 100) {
+            record.addError("Country of Birth", "Country of Birth exceeds character limit of 100");
+        }
+        if (stateOfBirth && stateOfBirth.length > 50) {
+            record.addError("State of Birth", "State of Birth exceeds character limit of 50");
+        }
+        if (cityOfBirth && cityOfBirth.length > 100) {
+            record.addError("City of Birth", "City of Birth exceeds character limit of 100");
+        }
+        if (countyOfBirth && countyOfBirth.length > 100) {
+            record.addError("County of Birth", "County of Birth exceeds character limit of 100");
+        }
+        if (citizenship && citizenship.length > 100) {
+            record.addError("Citizenship", "Citizenship exceeds character limit of 100");
+        }
+        if (visaNumber && visaNumber.length > 20) {
+            record.addError("Visa Number", "Visa Number exceeds character limit of 20");
+        }
+        if (languagesSpoken && languagesSpoken.length > 256) {
+            record.addError("Languages Spoken", "Languages Spoken exceeds character limit of 256");
+        }
+        if (spouseFullName && spouseFullName.length > 256) {
+            record.addError("Spouse Full Name", "Spouse Full Name exceeds character limit of 256");
+        }
+        if (corporateEmploymentType && corporateEmploymentType.length > 100) {
+            record.addError("Corporate Employment Type", "Corporate Employment Type exceeds character limit of 100");
+        }
+        if (supervisingPhysiciansName && supervisingPhysiciansName.length > 100) {
+            record.addError("Supervising Physician's Name", "Supervising Physician's Name exceeds character limit of 100");
+        }
+        if (specialty && specialty.length > 100) {
+            record.addError("Specialty", "Specialty exceeds character limit of 100");
+        }
+        if (subspecialty && subspecialty.length > 100) {
+            record.addError("Subspecialty", "Subspecialty exceeds character limit of 100");
+        }
+        if (taxonomy && taxonomy.length > 100) {
+            record.addError("Taxonomy", "Taxonomy exceeds character limit of 100");
+        }
+        if (medicareNumber && medicareNumber.length > 50) {
+            record.addError("Medicare Number", "Medicare Number exceeds character limit of 50");
+        }
+        if (medicaidNumber && medicaidNumber.length > 50) {
+            record.addError("Medicaid Number", "Medicaid Number exceeds character limit of 50");
+        }
+        if (loginEmail && loginEmail.length > 128) {
+            record.addError("Login Email/Contact Email", "Login Email/Contact Email exceeds character limit of 128");
+        }
+        if (otherEmail && otherEmail.length > 100) {
+            record.addError("Other Email", "Other Email exceeds character limit of 100");
+        }
+        if (addressLine1 && addressLine1.length > 100) {
+            record.addError("Address Line 1", "Address Line 1 exceeds character limit of 100");
+        }
+        if (addressLine2 && addressLine2.length > 50) {
+            record.addError("Address Line 2", "Address Line 2 exceeds character limit of 50");
+        }
+        if (city && city.length > 50) {
+            record.addError("City", "City exceeds character limit of 50");
+        }
+        if (state && state.length > 50) {
+            record.addError("State", "State exceeds character limit of 50");
+        }
+        if (zip && zip.length > 10) {
+            record.addError("Zip", "Zip exceeds character limit of 10");
+        }
+        if (country && country.length > 100) {
+            record.addError("Country", "Country exceeds character limit of 100");
+        }
+        if (county && county.length > 100) {
+            record.addError("County", "County exceeds character limit of 100");
+        }
+        if (emergencyContactFirstName && emergencyContactFirstName.length > 100) {
+            record.addError("Emergency Contact First Name", "Emergency Contact First Name exceeds character limit of 100");
+        }
+        if (emergencyContactLastName && emergencyContactLastName.length > 100) {
+            record.addError("Emergency Contact Last Name", "Emergency Contact Last Name exceeds character limit of 100");
+        }
+        if (emergencyContactEmail && emergencyContactEmail.length > 100) {
+            record.addError("Emergency Contact Email", "Emergency Contact Email exceeds character limit of 100");
+        }
+        if (taxId && taxId.length > 100) {
+            record.addError("Tax ID", "Tax ID exceeds character limit of 100");
+        }
+        if (taxName && taxName.length > 100) {
+            record.addError("Tax Name", "Tax Name exceeds character limit of 100");
+        }
+        if (providerId && providerId.length > 64) {
+            record.addError("Provider ID", "Provider ID exceeds character limit of 64");
+        }
+        if (internalId && internalId.length > 100) {
+            record.addError("Internal ID", "Internal ID exceeds character limit of 100");
+        }
+        if (emrId && emrId.length > 64) {
+            record.addError("EMR ID", "EMR ID exceeds character limit of 64");
+        }
+        if (preferredName && preferredName.length > 256) {
+            record.addError("Preferred Name", "Preferred Name exceeds character limit of 256");
+        }
+        if (upin && upin.length !== 6) {
+            record.addError("UPIN", "UPIN must be exactly 6 characters");
+        }
+        if (militaryTitle && militaryTitle.length > 200) {
+            record.addError("Military Title", "Military Title exceeds character limit of 200");
+        }
+        if (assistantName && assistantName.length > 256) {
+            record.addError("Assistant Name", "Assistant Name exceeds character limit of 256");
+        }
+        if (assistantEmail && assistantEmail.length > 100) {
+            record.addError("Assistant Email", "Assistant Email exceeds character limit of 100");
+        }
+        if (preferredCredentials && preferredCredentials.length > 50) {
+            record.addError("Preferred Credentials", "Preferred Credentials exceeds character limit of 50");
+        }
+        if (primaryCredentialingSpecialistEmail && primaryCredentialingSpecialistEmail.length > 200) {
+            record.addError("Primary Credentialing Specialist Email", "Primary Credentialing Specialist Email exceeds character limit of 200");
+        }
+        // Date format validation (m/d/yyyy)
+        const dateFields = [
+            { field: alternateNameStartDate, key: "Alternate Name Start Date" },
+            { field: alternateNameEndDate, key: "Alternate Name End Date" },
+            { field: birthDate, key: "Birth Date" },
+            { field: visaExpiration, key: "Visa Expiration" },
+            { field: timeInPositionStartDate, key: "Time in this Position Start Date" },
+            { field: timeInPositionEndDate, key: "Time in this Position End Date" },
+            { field: militaryStartDate, key: "Military Start Date" },
+            { field: militaryEndDate, key: "Military End Date" }
+        ];
+        dateFields.forEach(({ field, key }) => {
+            if (field && field.trim()) {
+                const dateRegex = /^(0?[1-9]|1[0-2])\/(0?[1-9]|[12][0-9]|3[01])\/\d{4}$/;
+                if (!dateRegex.test(field.trim())) {
+                    record.addError(key, `${key} must be formatted as m/d/yyyy`);
+                }
+            }
+        });
+        // Phone number validation (9, 10, or 12 digits)
+        const phoneFields = [
+            { field: homePhone, key: "Home Phone" },
+            { field: mobilePhone, key: "Mobile Phone" },
+            { field: pager, key: "Pager" },
+            { field: spousePhoneNumber, key: "Spouse Phone Number" },
+            { field: emergencyContactPhoneNumber, key: "Emergency Contact Phone Number" },
+            { field: assistantPhone, key: "Assistant Phone" }
+        ];
+        phoneFields.forEach(({ field, key }) => {
+            if (field && field.trim()) {
+                const phoneRegex = /^\d{9}$|^\d{10}$|^\d{12}$/;
+                if (!phoneRegex.test(field.replace(/\D/g, ''))) {
+                    record.addError(key, `${key} must be 9, 10, or 12 digits without formatting`);
+                }
+            }
+        });
+        // Email format validation
+        const emailFields = [
+            { field: loginEmail, key: "Login Email/Contact Email" },
+            { field: otherEmail, key: "Other Email" },
+            { field: emergencyContactEmail, key: "Emergency Contact Email" },
+            { field: assistantEmail, key: "Assistant Email" },
+            { field: primaryCredentialingSpecialistEmail, key: "Primary Credentialing Specialist Email" }
+        ];
+        emailFields.forEach(({ field, key }) => {
+            if (field && field.trim()) {
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (!emailRegex.test(field.trim())) {
+                    record.addError(key, `${key} must be a valid email format`);
+                }
+            }
+        });
+        // NPI validation (exactly 10 digits)
+        if (npi && npi.trim()) {
+            const npiRegex = /^\d{10}$/;
+            if (!npiRegex.test(npi.replace(/\D/g, ''))) {
+                record.addError("National Provider Identification Number (NPI)", "NPI must be exactly 10 digits");
+            }
+        }
+        // SSN validation (9 digits)
+        if (ssn && ssn.trim()) {
+            const ssnRegex = /^\d{9}$/;
+            if (!ssnRegex.test(ssn.replace(/\D/g, ''))) {
+                record.addError("Social Security Number (SSN)", "SSN must be 9 digits");
+            }
+        }
+        // Cross-field business rules
+        // Visa validations
+        if (visaExpiration?.trim() && !workVisaType?.trim()) {
+            record.addWarning("Work Visa Type", "Work Visa Type required when Visa Expiration is provided");
+        }
+        if (visaNumber?.trim() && !workVisaType?.trim()) {
+            record.addWarning("Work Visa Type", "Work Visa Type required when Visa Number is provided");
+        }
+        if (workVisaType?.trim() && (!visaExpiration?.trim() && !visaNumber?.trim())) {
+            record.addWarning("Visa Expiration", "Either Visa Expiration or Visa Number should be provided when Work Visa Type is specified");
+        }
+        // Clear "None" values for consistency
+        const fieldsToCheckForNone = [
+            "First Name", "Middle Name", "Last Name", "Alternate First Name", "Alternate Middle Name",
+            "Alternate Last Name", "Provider Type", "National Provider Identification Number (NPI)", "Social Security Number (SSN)", "Birth Date",
+            "Country of Birth", "State of Birth", "City of Birth", "County of Birth", "Gender", "Ethnicity", "Race",
+            "Citizenship", "Work Visa Type", "Visa Expiration", "Visa Number", "Accepting New Patients",
+            "Languages Spoken", "Marital Status", "Spouse Full Name", "Spouse Phone Number", "Corporate Employment Type",
+            "Supervising Physician's Name", "Time in this Position Start Date", "Time in this Position End Date",
+            "Specialty", "Subspecialty", "Taxonomy", "Medicare Number", "Medicaid Number", "Login Email/Contact Email",
+            "Other Email", "Home Phone", "Mobile Phone", "Pager", "Preferred Contact Method", "Address Line 1",
+            "Address Line 2", "City", "State", "Zip", "Country", "County", "Emergency Contact First Name",
+            "Emergency Contact Last Name", "Emergency Contact Phone Number", "Emergency Contact Email", "Tax ID",
+            "Tax Name", "Provider ID", "Internal ID", "EMR ID", "SSO ID", "Suffix", "Preferred Name",
+            "Alternate Name Suffix", "UPIN", "Military Start Date", "Military End Date", "Military Branch",
+            "Military Status", "Military Title", "Assistant Name", "Assistant Email", "Assistant Phone",
+            "Preferred Credentials", "Affiliation Verification Available", "Primary Credentialing Specialist Email",
+            "Disable Expiring Notifications"
+        ];
+        fieldsToCheckForNone.forEach(fieldKey => {
+            const value = record.get(fieldKey);
+            if (value && value.trim().toLowerCase() === "none") {
+                record.set(fieldKey, "");
+            }
+        });
+        return record;
+    }));
+};
+exports.providerDemographicImportValidationHook = providerDemographicImportValidationHook;
+
+
+/***/ }),
+
 /***/ 97447:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
@@ -184520,6 +185863,7 @@ const health_record_sheet_1 = __nccwpck_require__(66854);
 const other_record_sheet_1 = __nccwpck_require__(12132);
 const work_gap_sheet_1 = __nccwpck_require__(73317);
 const work_history_sheet_1 = __nccwpck_require__(80627);
+const provider_demographic_import_sheet_1 = __nccwpck_require__(60705);
 // Generate field mappings from all sheet configurations
 function generateFieldMappings() {
     const sheets = [
@@ -184555,7 +185899,8 @@ function generateFieldMappings() {
         health_record_sheet_1.healthRecordSheet,
         other_record_sheet_1.otherRecordSheet,
         work_gap_sheet_1.workGapSheet,
-        work_history_sheet_1.workHistorySheet
+        work_history_sheet_1.workHistorySheet,
+        provider_demographic_import_sheet_1.providerDemographicImportSheet
     ];
     const mappings = {};
     sheets.forEach(sheet => {
